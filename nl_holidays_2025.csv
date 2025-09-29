@@ -1,22 +1,157 @@
 Date,Holiday/Event
 2025-01-01,Nieuwjaarsdag (New Year’s Day)
-2025-01-27,Herdenking Holocaust (Holocaust Remembrance Day)
-2025-03-08,International Women’s Day
-2025-04-10,De bevrijding van Emmen (Liberation of Emmen)
-2025-04-18,Goede Vrijdag (Good Friday)
-2025-04-20,Eerste Paasdag (Easter Sunday)
-2025-04-21,Tweede Paasdag (Easter Monday)
-2025-04-26,Koningsdag (King’s Day)
-2025-05-03,World Press Freedom Day
-2025-05-05,Bevrijdingsdag (Liberation Day)
-2025-05-29,Hemelvaartsdag (Ascension Day)
-2025-06-05,World Environment Day
-2025-06-08,Eerste Pinksterdag (Pentecost Sunday)
-2025-06-09,Tweede Pinksterdag (Pentecost Monday)
-2025-07-26,C’est la Vie Festival (Cultural Festival, Emmen)
-2025-07-26,Zomeravondmarkt Gees (Summer Evening Market)
-2025-09-05,International Day of Charity
-2025-09-21,International Day of Peace
-2025-09-01 (approx),Uitfestival Emmen (Opening of cultural season)
-2025-12-25,Eerste Kerstdag (Christmas Day)
-2025-12-26,Tweede Kerstdag (Boxing Day)
+2025-01-02,Nieuwjaarsdag (New Year’s Day)
+2025-01-03,Nieuwjaarsdag (New Year’s Day)
+2025-01-04,Nieuwjaarsdag (New Year’s Day)
+2025-01-05,Nieuwjaarsdag (New Year’s Day)
+2025-02-03,Voorjaarsvakantie
+2025-02-04,Voorjaarsvakantie
+2025-02-08,Voorjaarsvakantie
+2025-02-14,Valentijdsdag
+2025-02-15,Voorjaarsvakantie
+2025-02-16,Voorjaarsvakantie
+2025-02-17,Voorjaarsvakantie
+2025-02-18,Voorjaarsvakantie
+2025-02-19,Voorjaarsvakantie
+2025-02-20,Voorjaarsvakantie
+2025-02-21,Voorjaarsvakantie
+2025-02-22,Voorjaarsvakantie
+2025-02-23,Voorjaarsvakantie
+2025-02-24,Voorjaarsvakantie
+2025-02-25,Voorjaarsvakantie
+2025-02-26,Voorjaarsvakantie
+2025-02-27,Voorjaarsvakantie
+2025-02-28,Voorjaarsvakantie
+2025-03-01,Voorjaarsvakantie
+2025-03-02,Voorjaarsvakantie
+2025-04-05,Paasvakantie
+2025-04-06,Paasvakantie
+2025-04-07,Paasvakantie
+2025-04-08,Paasvakantie
+2025-04-09,Paasvakantie
+2025-04-10,Paasvakantie
+2025-04-11,Paasvakantie
+2025-04-12,Paasvakantie
+2025-04-13,Paasvakantie
+2025-04-14,Paasvakantie
+2025-04-15,Paasvakantie
+2025-04-16,Paasvakantie
+2025-04-17,Paasvakantie
+2025-04-18,Goede Vrijdag
+2025-04-19,Paasvakantie
+2025-04-20,Pasen
+2025-04-21,Pasen
+2025-04-22,Meivakantie
+2025-04-23,Meivakantie
+2025-04-24,Meivakantie
+2025-04-25,Meivakantie
+2025-04-26,Koningsdag
+2025-04-27,Meivakantie
+2025-04-28,Meivakantie
+2025-04-29,Meivakantie
+2025-04-30,Meivakantie
+2025-05-01,Meivakantie
+2025-05-02,Meivakantie
+2025-05-03,Meivakantie
+2025-05-04,Meivakantie
+2025-05-05,Bevrijdingsdag
+2025-05-11,Moederdag
+2025-05-16,90 jr Dierenpark
+2025-05-29,Hemelvaartsdag
+2025-05-30,Hemelvaartsweekend
+2025-05-31,Hemelvaartsweekend
+2025-06-01,Hemelvaartsweekend
+2025-06-08,Pinksteren
+2025-06-09,Pinksteren
+2025-06-10,Pinksterweekend
+2025-06-15,Vaderdag
+2025-06-19,Sacramentsdag
+2025-07-05,Zomervakantie
+2025-07-06,Zomervakantie
+2025-07-07,Zomervakantie
+2025-07-08,Zomervakantie
+2025-07-09,Zomervakantie
+2025-07-10,Zomervakantie
+2025-07-12,Zomervakantie
+2025-07-13,Zomervakantie
+2025-07-14,Zomervakantie
+2025-07-15,Zomervakantie
+2025-07-16,Zomervakantie
+2025-07-17,Zomervakantie
+2025-07-18,Zomervakantie
+2025-07-19,Zomervakantie
+2025-07-20,Zomervakantie
+2025-07-21,Zomervakantie
+2025-07-22,Zomervakantie
+2025-07-23,Zomervakantie
+2025-07-24,Zomervakantie
+2025-07-25,Zomervakantie
+2025-07-26,Zomervakantie
+2025-07-27,Zomervakantie
+2025-07-28,Zomervakantie
+2025-07-29,Zomervakantie
+2025-07-30,Zomervakantie
+2025-07-31,Zomervakantie
+2025-08-01,Zomervakantie
+2025-08-02,Zomervakantie
+2025-08-03,Zomervakantie
+2025-08-04,Zomervakantie
+2025-08-05,Zomervakantie
+2025-08-06,Zomervakantie
+2025-08-07,Zomervakantie
+2025-08-08,Zomervakantie
+2025-08-09,Zomervakantie
+2025-08-10,Zomervakantie
+2025-08-11,Zomervakantie
+2025-08-12,Zomervakantie
+2025-08-13,Zomervakantie
+2025-08-14,Zomervakantie
+2025-08-15,Zomervakantie
+2025-08-16,Zomervakantie
+2025-08-17,Zomervakantie
+2025-08-18,Zomervakantie
+2025-08-19,Zomervakantie
+2025-08-20,Zomervakantie
+2025-08-21,Zomervakantie
+2025-08-22,Zomervakantie
+2025-08-23,Zomervakantie
+2025-08-24,Zomervakantie
+2025-08-25,Zomervakantie
+2025-08-26,Zomervakantie
+2025-08-27,Zomervakantie
+2025-08-28,Zomervakantie
+2025-08-29,Zomervakantie
+2025-08-30,Zomervakantie
+2025-08-31,Zomervakantie
+2025-10-03,Duitse Eenheid
+2025-10-11,Herfstvakantie
+2025-10-12,Herfstvakantie
+2025-10-13,Herfstvakantie
+2025-10-14,Herfstvakantie
+2025-10-15,Herfstvakantie
+2025-10-16,Herfstvakantie
+2025-10-17,Herfstvakantie
+2025-10-18,Herfstvakantie
+2025-10-19,Herfstvakantie
+2025-10-20,Herfstvakantie
+2025-10-21,Herfstvakantie
+2025-10-22,Herfstvakantie
+2025-10-23,Herfstvakantie
+2025-10-24,Herfstvakantie
+2025-10-25,Herfstvakantie
+2025-10-26,Herfstvakantie
+2025-10-31,Hervormingstag
+2025-11-01,Allerheiligen
+2025-11-19,Buss und Bettag
+2025-12-20,Kerstvakantie
+2025-12-21,Kerstvakantie
+2025-12-22,Kerstvakantie
+2025-12-23,Kerstvakantie
+2025-12-24,Kerstvakantie
+2025-12-25,Eerste Kerstdag
+2025-12-26,Tweede Kerstdag
+2025-12-27,Kerstvakantie
+2025-12-28,Kerstvakantie
+2025-12-29,Kerstvakantie
+2025-12-30,Kerstvakantie
+2025-12-31,Oudejaarsdag
