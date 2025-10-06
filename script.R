@@ -12,7 +12,7 @@ visitor$Precipitation <- rep(0, 386)
 # Date in visitor.csv was char, not date type
 visitor$Date <- as.Date(visitor$Date, format = "%Y-%m-%d")
 
-View(visitor)
+#View(visitor)
 
 
 
@@ -37,7 +37,7 @@ daily_weather <- weather %>%
 # change col names
 colnames(daily_weather) <- c("Date", "Temperature", "Max_Temperature", "Min_Temperature", "Precipitation", "Rainfall_Hours") 
 # Now you can join with your other CSV by Date
-View(daily_weather)
+#View(daily_weather)
 
 
 
@@ -60,10 +60,11 @@ joined <- joined %>%
 write.csv(joined, "joined.csv", row.names = FALSE)
 
 
+
 # INSERT HOLIDAYS GERMANY - LOWER SAXONY TO JOINED.CSV
 holidays_lower_saxony_2025 <- read.csv("holidays_lower_saxony_2025.csv")
 colnames(holidays_lower_saxony_2025) <- c("Date", "HolidayGermany")
-View(holidays_lower_saxony_2025)
+# View(holidays_lower_saxony_2025)
 
 joined <- read.csv("joined.csv")
 # join the HolidayGermany columns from both csv's on joined. csv
@@ -104,7 +105,7 @@ holidays_north_rhine_westphalia_2025 <- read.csv("holidays_north_rhine_westphali
 # based on Date
 # join the two csv files based on Date
 colnames(holidays_north_rhine_westphalia_2025) <- c("date_range", "HolidayGermany")
-View(holidays_north_rhine_westphalia_2025)
+#View(holidays_north_rhine_westphalia_2025)
 
 # SIMPLIFIED: Process North Rhine Westphalia dates
 holidays_north_rhine_westphalia_expanded <- data.frame()
@@ -148,7 +149,7 @@ joined <- joined %>%
   select(-HolidayGermany.x, -HolidayGermany.y)
 
 joined$Rainfall_Hours <- NULL
-View(joined)
+#View(joined)
 
 # First, let's see what's actually in the North Rhine Westphalia file
 print("Contents of North Rhine Westphalia holidays:")
@@ -172,3 +173,45 @@ any(joined$Date %in% holidays_north_rhine_westphalia_2025$Date)
 matched_dates <- joined$Date[joined$Date %in% holidays_north_rhine_westphalia_2025$Date]
 print(matched_dates)
 
+
+
+# JOIN EVENTS.CSV FOR 2025
+events <- read.csv("events.csv")
+#View(events)
+
+joined <- left_join(joined, events, by = "Date")
+joined <- joined %>%
+  
+  mutate(
+    Event = ifelse(!is.na(Event.y), Event.y, Event.x)
+  ) %>%
+  select(-Event.x, -Event.y)  # remove the temporary columns
+
+#View(joined)
+# check if any dates in joined data match holidays
+any(joined$Date %in% events$Date)
+
+
+
+# ADD HOLIDAYS NETHERLANDS CSV
+netherlands_holidays <- read.csv("nl_holidays_2025.csv") 
+colnames(netherlands_holidays) <- c("Date", "HolidayNetherlands")
+View(netherlands_holidays)
+
+joined <- left_join(joined, netherlands_holidays, by = "Date")
+joined <- joined %>%
+  
+  mutate(
+    HolidayNetherlands = ifelse(!is.na(HolidayNetherlands.x), HolidayNetherlands.y, HolidayNetherlands.x)
+  ) %>%
+  select(-HolidayNetherlands.x, -HolidayNetherlands.y)  # remove the temporary columns
+
+joined$HolidayNetherlands[is.na(joined$HolidayNetherlands)] <- 0
+View(joined)
+
+# check if any dates in joined data match holidays
+any(joined$Date %in% holidays_lower_saxony_2025$Date)
+
+# see specific matches
+matched_dates <- joined$Date[joined$Date %in% netherlands_holidays$Date]
+print(matched_dates)
