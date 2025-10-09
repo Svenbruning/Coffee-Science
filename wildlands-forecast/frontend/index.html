@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Wildlands Visitor Prediction</title>
+</head>
+<body>
+  <h1>Wildlands Visitor Prediction</h1>
+
+  <label>Temperature (°C):</label>
+  <input id="temperature" type="number" value="25"><br>
+
+  <label>Rain (0 = no, 1 = yes):</label>
+  <input id="rain" type="number" min="0" max="1" value="0"><br>
+
+  <label>Vacation (0 = no, 1 = yes):</label>
+  <input id="vacation" type="number" min="0" max="1" value="1"><br>
+
+  <label>Event (0 = no, 1 = yes):</label>
+  <input id="event" type="number" min="0" max="1" value="0"><br><br>
+
+  <button id="btn">Predict</button>
+
+  <h3 id="result"></h3>
+
+  <script>
+    document.getElementById('btn').addEventListener('click', async () => {
+      const payload = {
+        temperature: Number(document.getElementById('temperature').value),
+        rain: Number(document.getElementById('rain').value),
+        vacation: Number(document.getElementById('vacation').value),
+        event: Number(document.getElementById('event').value)
+      };
+
+      try {
+        const res = await fetch("http://127.0.0.1:5000/api/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          document.getElementById('result').innerText = 'Server error: ' + res.status + ' - ' + text;
+          return;
+        }
+        const data = await res.json();
+        document.getElementById('result').innerText =
+          "📊 Expected number of visitors: " + data.predicted_visitors;
+      } catch (err) {
+        document.getElementById('result').innerText = 'Network error: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
