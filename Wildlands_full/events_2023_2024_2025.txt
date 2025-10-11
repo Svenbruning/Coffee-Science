@@ -1,0 +1,57 @@
+Date,Event
+2023-04-27,Kingsnight Festival Assen
+2023-04-27,Kingsnight Festival Groningen
+2023-04-28,King's Day Celebration Assen
+2023-04-28,King's Day Celebration Groningen
+2023-05-13,Assen Motorcycle Market
+2023-06-23,TT Assen MotoGP
+2023-06-24,TT Assen MotoGP
+2023-06-25,TT Assen MotoGP
+2023-07-07,Noorderzon Festival Groningen
+2023-07-08,Noorderzon Festival Groningen
+2023-07-14,Drentse Fiets4Daagse Assen
+2023-08-18,Summer Carnival Groningen
+2023-08-25,Bluesnight Festival Groningen
+2023-09-02,Assen Autumn Fair
+2023-10-03,UTOPIA Music Festival Groningen
+2023-10-27,Groningen Museum Night
+2023-11-11,Sinterklaas Arrival Groningen
+2023-11-17,Christmas Market Emmen
+2023-12-15,Christmas Market Groningen
+2023-12-16,Winter Wonderland Assen
+2024-04-26,Kingsnight Festival Groningen
+2024-04-27,King's Day Celebration Groningen
+2024-04-27,King's Day Celebration Assen
+2024-05-11,Assen Motorcycle Market
+2024-05-18,Emmen City Festival
+2024-06-28,TT Assen MotoGP
+2024-06-29,TT Assen MotoGP
+2024-06-30,TT Assen MotoGP
+2024-07-05,Noorderzon Festival Groningen
+2024-07-12,Drentse Fiets4Daagse Assen
+2024-08-16,Summer Carnival Groningen
+2024-08-23,Bluesnight Festival Groningen
+2024-08-31,Assen Autumn Fair
+2024-09-07,Groningen Ontzettend Nederlands Festival
+2024-10-01,UTOPIA Music Festival Groningen
+2024-10-25,Groningen Museum Night
+2024-11-16,Sinterklaas Arrival Groningen
+2024-11-22,Christmas Market Emmen
+2024-12-13,Christmas Market Groningen
+2024-12-14,Winter Wonderland Assen
+2025-04-25,Kingsnight Festival Groningen
+2025-04-26,King's Day Celebration Groningen
+2025-04-26,King's Day Celebration Assen
+2025-05-10,Assen Motorcycle Market
+2025-05-17,Emmen City Festival
+2025-06-27,TT Assen MotoGP
+2025-06-28,TT Assen MotoGP
+2025-06-29,TT Assen MotoGP
+2025-07-04,Noorderzon Festival Groningen
+2025-07-11,Drentse Fiets4Daagse Assen
+2025-08-15,Summer Carnival Groningen
+2025-08-22,Bluesnight Festival Groningen
+2025-08-30,Assen Autumn Fair
+2025-09-06,Groningen Ontzettend Nederlands Festival
+2025-09-27,Emmen Flower Festival
+2025-10-03,Eurosonic Noorderslag Groningen
