@@ -6,50 +6,26 @@
 </head>
 <body>
   <h1>Wildlands Visitor Prediction</h1>
-
-  <label>Temperature (°C):</label>
-  <input id="temperature" type="number" value="25"><br>
-
-  <label>Rain (0 = no, 1 = yes):</label>
-  <input id="rain" type="number" min="0" max="1" value="0"><br>
-
-  <label>Vacation (0 = no, 1 = yes):</label>
-  <input id="vacation" type="number" min="0" max="1" value="1"><br>
-
-  <label>Event (0 = no, 1 = yes):</label>
-  <input id="event" type="number" min="0" max="1" value="0"><br><br>
-
-  <button id="btn">Predict</button>
-
+  <h2 id="date"></h2>
   <h3 id="result"></h3>
+  <p id="details"></p>
 
   <script>
-    document.getElementById('btn').addEventListener('click', async () => {
-      const payload = {
-        temperature: Number(document.getElementById('temperature').value),
-        rain: Number(document.getElementById('rain').value),
-        vacation: Number(document.getElementById('vacation').value),
-        event: Number(document.getElementById('event').value)
-      };
-
+    async function fetchPrediction() {
       try {
-        const res = await fetch("http://127.0.0.1:5000/api/predict", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          document.getElementById('result').innerText = 'Server error: ' + res.status + ' - ' + text;
-          return;
-        }
+        const res = await fetch("http://127.0.0.1:5000/api/predict_today");
         const data = await res.json();
-        document.getElementById('result').innerText =
-          "📊 Expected number of visitors: " + data.predicted_visitors;
+
+        document.getElementById('date').innerText = `📅 Date: ${data.date}`;
+        document.getElementById('result').innerText = `📊 Expected Visitors: ${data.predicted_visitors}`;
+        document.getElementById('details').innerText =
+          `🌡️ Temp: ${data.temperature}°C | 🌧️ Rain: ${data.rain_mm}mm | 🏖️ Vacation: ${data.vacation} | 🎪 Event: ${data.event}`;
       } catch (err) {
-        document.getElementById('result').innerText = 'Network error: ' + err.message;
+        document.getElementById('result').innerText = 'Error fetching prediction: ' + err.message;
       }
-    });
+    }
+
+    window.onload = fetchPrediction;
   </script>
 </body>
 </html>
