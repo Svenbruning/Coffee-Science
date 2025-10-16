@@ -7,7 +7,7 @@ filter_dates <- function(data, date_col = Date, start_date, end_date, date_forma
   
   data %>%
     mutate({{date_col}} := as.Date(!!date_col, format = date_format)) %>%
-    filter({{date_col}} >= as.Date("2023-01-01") & {{date_col}} <= as.Date("2025-09-07"))
+    filter({{date_col}} >= as.Date("2023-01-01") & {{date_col}} <= as.Date("2026-12-31"))
 }
 
 
@@ -19,7 +19,6 @@ visitor <- read.csv("visitordaily.csv", sep = ";")
 visitor$HolidayNetherlands <- rep(0, 48557)
 visitor$HolidayGermany <- rep(0, 48557)
 visitor$Event <- rep(0, 48557)
-visitor$Campaign <- rep(0, 48557)
 
 
 # filter dates for 2023-2025 (what we have until now)
@@ -55,7 +54,7 @@ add_weather <- function(data) {
 visitor_filtered <- filter_dates(visitor)
 visitor <- add_weather(visitor_filtered)
 
-colnames(visitor) <- c("Ticket ID","Type of Ticket", "Date", "Nr Used Entrances", "Holiday_Netherlands", "Holiday_Germany", "Event", "Campaign", "Temperature (mean)", "Precipitation (sum)")
+colnames(visitor) <- c("Ticket ID","Type of Ticket", "Date", "Nr Used Entrances", "Holiday_Netherlands", "Holiday_Germany", "Event", "Temperature (mean)", "Precipitation (sum)")
 View(visitor)
 
 
@@ -191,7 +190,7 @@ visitor <- left_join(visitor, holiday_netherlands_2023, by = "Date") %>%
 # ADD EVENTS FROM 2023, 2024, 2025
 events_2023_2024_2025 <- read.csv("events_2023_2024_2025.txt", sep = ",")
 events_2023_2024_2025 <- filter_dates(events_2023_2024_2025, Date, "2023-01-01", "2025-12-31")
-View(events_2023_2024_2025)
+#View(events_2023_2024_2025)
 
 # Aggregate duplicate dates by combining holiday names
 events_2023_2024_2025 <- events_2023_2024_2025 %>%
@@ -199,15 +198,62 @@ events_2023_2024_2025 <- events_2023_2024_2025 %>%
   summarize(Event = paste(unique(Event), collapse = "; ")) %>%
   ungroup()
 
-# Convert your numeric column to character, then coalesce
-visitor <- left_join(visitor, events_2023_2024_2025, by = "Date") %>%
+visitor <- visitor %>%
+  left_join(events_2023_2024_2025, by = "Date") %>%
   mutate(
-    Event = coalesce(Event.y, as.character(Event.x))
+    # Keep the event description where available, otherwise keep original
+    Event = ifelse(!is.na(Event.y), Event.y, as.character(Event.x))
   ) %>%
-  select(-Event.x, -Event.y)
+  select(-Event.x, -Event.y)  # Remove the temporary columns
 
 #View(visitor)
 
 
 
 # ADD CAMPAIGNS
+# clean csv that contains campaigns
+campaign <- read.csv("all promosl.csv", sep = ";")
+colnames(campaign) <- c("Week", "Date", "Campaign_Netherlands", "Campaign_Germany")
+
+# remove column for week
+campaign$Week <- NULL
+
+# Convert the date column as the dates in full data frame
+campaign <- campaign %>%
+  mutate(
+    Date = format(dmy(Date), "%Y-%m-%d")
+  )
+campaign <- filter_dates(campaign, Date, "2023-01-01", "2026-12-31")
+
+
+# convert + to 0 (char type)
+# For a specific column
+campaign$Campaign_Netherlands[campaign$Campaign_Netherlands == "+"] <- "Yes"
+campaign$Campaign_Netherlands[is.na(campaign$Campaign_Netherlands) | campaign$Campaign_Netherlands == ""] <- "No"
+View(campaign)
+
+# For a specific column
+campaign$Campaign_Germany[campaign$Campaign_Germany == "+"] <- "Yes"
+campaign$Campaign_Germany[is.na(campaign$Campaign_Germany) | campaign$Campaign_Germany == ""] <- "No"
+#View(campaign)
+
+
+# add campaigns to main data frame
+# Select only the Date and the two columns you want to add
+columns_to_add <- campaign %>%
+  select(Date, Campaign_Netherlands, Campaign_Germany)
+
+# Join with your main dataframe
+visitor <- visitor %>%
+  left_join(columns_to_add, by = "Date")
+
+
+library(tidyr)
+# for 2023, only N/A s appeared, since we don't have the campaigns for that year
+visitor <- visitor %>%
+  mutate(
+    Campaign_Netherlands = replace_na(Campaign_Netherlands, "0"),
+    Campaign_Germany = replace_na(Campaign_Germany, "0")
+  )
+  
+View(visitor)
