@@ -1,6 +1,2 @@
-date,temperature,rain_mm,vacation,event,predicted_visitors
-2025-10-15,13.6,0.5,0,0,2626
-2025-10-28,12.5,2.3,0,0,2610
-2025-10-29,13.5,0.6,0,0,2626
-2025-10-30,12.1,6.5,0,0,2597
-2025-10-31,11.9,0.0,0,0,2626
+Date,temperature,rain_mm,vacation,event,campaign,predicted_visitors
+2025-10-31,12.1,0.0,0,0,0,3803

@@ -10,18 +10,32 @@ from utils.vacations import is_vacation_today
 from utils.events import is_event_today
 
 app = Flask(__name__)
-
-# CORS fix: accepteer alle requests voor /api/*
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 BASE_DIR = os.path.dirname(__file__)
-MODEL_PATH = os.path.join(BASE_DIR, '..', 'ml_model', 'model.pkl')
-DATA_PATH = os.path.join(BASE_DIR, '..', 'data', 'raw_visitors.csv')
+MODEL_PATH = os.path.join(BASE_DIR, '..', 'ml_model', 'model_lgb.pkl')
+DATA_PATH = os.path.join(BASE_DIR, '..', 'data', 'daily_visitors.csv')
 PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'daily_predictions.csv')
 
-# Model en historische data
+# Load model & historical data
 model = joblib.load(MODEL_PATH)
-historical = pd.read_csv(DATA_PATH, parse_dates=['date']).sort_values('date')
+historical = pd.read_csv(DATA_PATH)
+historical.rename(columns={
+    'Date': 'date',
+    'Nr Used Entrances': 'visitors',
+    'Temperature (mean)': 'temperature',
+    'Precipitation (sum)': 'rain_mm',
+    'Vacation': 'vacation',
+    'Event': 'event',
+    'Campaign': 'campaign'
+}, inplace=True)
+historical['date'] = pd.to_datetime(historical['date'])
+historical = historical.sort_values('date')
+
+# Extra features
+historical['day_of_week'] = historical['date'].dt.weekday
+historical['is_weekend'] = historical['day_of_week'].isin([5,6]).astype(int)
+historical['month'] = historical['date'].dt.month
 
 def generate_daily_prediction():
     today = datetime.today().strftime('%Y-%m-%d')
@@ -34,18 +48,27 @@ def generate_daily_prediction():
     roll_7 = historical['visitors'].iloc[-7:].mean() if len(historical) >= 7 else lag_1
 
     temperature, rain_mm = get_today_weather()
-    vacation = is_vacation_today()
-    event = is_event_today()
+    vacation = int(is_vacation_today())
+    event = int(is_event_today())
+    campaign = 0
+
+    day_of_week = datetime.today().weekday()
+    is_weekend = 1 if day_of_week in [5,6] else 0
+    month = datetime.today().month
 
     df = pd.DataFrame([{
         'temperature': temperature,
         'rain_mm': rain_mm,
         'vacation': vacation,
         'event': event,
+        'campaign': campaign,
         'lag_1': lag_1,
         'lag_7': lag_7,
         'roll_3': roll_3,
-        'roll_7': roll_7
+        'roll_7': roll_7,
+        'day_of_week': day_of_week,
+        'is_weekend': is_weekend,
+        'month': month
     }])
 
     prediction = int(model.predict(df)[0])
@@ -53,15 +76,19 @@ def generate_daily_prediction():
     try:
         preds = pd.read_csv(PREDICTIONS_PATH)
     except FileNotFoundError:
-        preds = pd.DataFrame(columns=['date','temperature','rain_mm','vacation','event','predicted_visitors'])
+        preds = pd.DataFrame(columns=['Date','temperature','rain_mm','vacation','event','campaign','day_of_week','is_weekend','month','predicted_visitors'])
 
-    preds = preds[preds['date'] != today]  # oude verwijderen
+    preds = preds[preds['Date'] != today]
     new_row = pd.DataFrame([{
-        'date': today,
+        'Date': today,
         'temperature': temperature,
         'rain_mm': rain_mm,
         'vacation': vacation,
         'event': event,
+        'campaign': campaign,
+        'day_of_week': day_of_week,
+        'is_weekend': is_weekend,
+        'month': month,
         'predicted_visitors': prediction
     }])
     preds = pd.concat([preds, new_row], ignore_index=True)
@@ -74,21 +101,21 @@ def predict_today():
     today = datetime.today().strftime('%Y-%m-%d')
     try:
         preds = pd.read_csv(PREDICTIONS_PATH)
-        row = preds[preds['date'] == today]
+        row = preds[preds['Date'] == today]
         if not row.empty:
             result = row.iloc[0]
             return jsonify({
-                'date': result['date'],
+                'date': result['Date'],
                 'temperature': result['temperature'],
                 'rain_mm': result['rain_mm'],
                 'vacation': bool(result['vacation']),
                 'event': bool(result['event']),
+                'campaign': bool(result['campaign']),
                 'predicted_visitors': int(result['predicted_visitors'])
             })
     except FileNotFoundError:
         pass
 
-    # Geen voorspelling → genereer nu
     generate_daily_prediction()
     return predict_today()
 
@@ -96,21 +123,29 @@ def predict_today():
 def predict_custom():
     try:
         data = request.get_json(force=True)
-        # Veilig waarden ophalen en default fallback
         temperature = float(data.get('temperature', 20))
         rain_mm = float(data.get('rain_mm', 0))
         vacation = int(data.get('vacation', 0))
         event = int(data.get('event', 0))
+        campaign = int(data.get('campaign', 0))
+
+        day_of_week = datetime.today().weekday()
+        is_weekend = 1 if day_of_week in [5,6] else 0
+        month = datetime.today().month
 
         df = pd.DataFrame([{
             'temperature': temperature,
             'rain_mm': rain_mm,
             'vacation': vacation,
             'event': event,
+            'campaign': campaign,
             'lag_1': historical['visitors'].iloc[-1],
             'lag_7': historical['visitors'].iloc[-7] if len(historical) >= 7 else historical['visitors'].iloc[-1],
             'roll_3': historical['visitors'].iloc[-3:].mean() if len(historical) >= 3 else historical['visitors'].iloc[-1],
-            'roll_7': historical['visitors'].iloc[-7:].mean() if len(historical) >= 7 else historical['visitors'].iloc[-1]
+            'roll_7': historical['visitors'].iloc[-7:].mean() if len(historical) >= 7 else historical['visitors'].iloc[-1],
+            'day_of_week': day_of_week,
+            'is_weekend': is_weekend,
+            'month': month
         }])
 
         prediction = int(model.predict(df)[0])
@@ -119,7 +154,7 @@ def predict_custom():
         print("Error in /api/predict_custom:", e)
         return jsonify({'error': str(e)}), 400
 
-# Scheduler om dagelijks voorspellingen te genereren
+# Scheduler
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(generate_daily_prediction, 'cron', hour=8, minute=0)
 scheduler.start()
