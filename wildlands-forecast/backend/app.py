@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 import joblib
@@ -10,7 +10,9 @@ from utils.vacations import is_vacation_today
 from utils.events import is_event_today
 
 app = Flask(__name__)
-CORS(app)
+
+# CORS fix: accepteer alle requests voor /api/*
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 BASE_DIR = os.path.dirname(__file__)
 MODEL_PATH = os.path.join(BASE_DIR, '..', 'ml_model', 'model.pkl')
@@ -90,6 +92,34 @@ def predict_today():
     generate_daily_prediction()
     return predict_today()
 
+@app.route('/api/predict_custom', methods=['POST'])
+def predict_custom():
+    try:
+        data = request.get_json(force=True)
+        # Veilig waarden ophalen en default fallback
+        temperature = float(data.get('temperature', 20))
+        rain_mm = float(data.get('rain_mm', 0))
+        vacation = int(data.get('vacation', 0))
+        event = int(data.get('event', 0))
+
+        df = pd.DataFrame([{
+            'temperature': temperature,
+            'rain_mm': rain_mm,
+            'vacation': vacation,
+            'event': event,
+            'lag_1': historical['visitors'].iloc[-1],
+            'lag_7': historical['visitors'].iloc[-7] if len(historical) >= 7 else historical['visitors'].iloc[-1],
+            'roll_3': historical['visitors'].iloc[-3:].mean() if len(historical) >= 3 else historical['visitors'].iloc[-1],
+            'roll_7': historical['visitors'].iloc[-7:].mean() if len(historical) >= 7 else historical['visitors'].iloc[-1]
+        }])
+
+        prediction = int(model.predict(df)[0])
+        return jsonify({'predicted_visitors': prediction})
+    except Exception as e:
+        print("Error in /api/predict_custom:", e)
+        return jsonify({'error': str(e)}), 400
+
+# Scheduler om dagelijks voorspellingen te genereren
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(generate_daily_prediction, 'cron', hour=8, minute=0)
 scheduler.start()

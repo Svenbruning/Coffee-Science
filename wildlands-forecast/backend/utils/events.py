@@ -1,13 +1,13 @@
 import pandas as pd
 from datetime import datetime
+import os
 
-EVENTS_PATH = "../data/events.csv"
+EVENTS_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'events.csv')
 
-def is_event_today():
-    today = datetime.today().date()
+def is_event_today(date=None):
+    today = datetime.today().date() if date is None else pd.to_datetime(date).date()
     df = pd.read_csv(EVENTS_PATH, parse_dates=["start_date", "end_date"])
     for _, row in df.iterrows():
         if row["start_date"].date() <= today <= row["end_date"].date():
             return 1
     return 0
-    
