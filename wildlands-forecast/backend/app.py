@@ -17,7 +17,7 @@ MODEL_PATH = os.path.join(BASE_DIR, '..', 'ml_model', 'model_lgb.pkl')
 DATA_PATH = os.path.join(BASE_DIR, '..', 'data', 'daily_visitors.csv')
 PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'daily_predictions.csv')
 
-# Load model & historical data
+# Load model & data
 model = joblib.load(MODEL_PATH)
 historical = pd.read_csv(DATA_PATH)
 historical.rename(columns={
@@ -34,63 +34,62 @@ historical = historical.sort_values('date')
 
 # Extra features
 historical['day_of_week'] = historical['date'].dt.weekday
-historical['is_weekend'] = historical['day_of_week'].isin([5,6]).astype(int)
+historical['is_weekend'] = historical['day_of_week'].isin([5, 6]).astype(int)
 historical['month'] = historical['date'].dt.month
 
-def generate_daily_prediction():
-    today = datetime.today().strftime('%Y-%m-%d')
-    print(f"[{datetime.now()}] Generating prediction for {today}...")
-
+def create_features(temperature, rain_mm, vacation, event, campaign, day_of_week=None, month=None):
+    """
+    Bouw exact dezelfde features voor zowel daily als custom voorspelling.
+    """
     last_day = historical.iloc[-1]
     lag_1 = last_day['visitors']
     lag_7 = historical['visitors'].iloc[-7] if len(historical) >= 7 else lag_1
     roll_3 = historical['visitors'].iloc[-3:].mean() if len(historical) >= 3 else lag_1
     roll_7 = historical['visitors'].iloc[-7:].mean() if len(historical) >= 7 else lag_1
 
-    temperature, rain_mm = get_today_weather()
-    vacation = int(is_vacation_today())
-    event = int(is_event_today())
-    campaign = 0
-
-    day_of_week = datetime.today().weekday()
+    if day_of_week is None:
+        day_of_week = datetime.today().weekday()
+    if month is None:
+        month = datetime.today().month
     is_weekend = 1 if day_of_week in [5,6] else 0
-    month = datetime.today().month
 
-    df = pd.DataFrame([{
-        'temperature': temperature,
-        'rain_mm': rain_mm,
-        'vacation': vacation,
-        'event': event,
-        'campaign': campaign,
-        'lag_1': lag_1,
-        'lag_7': lag_7,
-        'roll_3': roll_3,
-        'roll_7': roll_7,
-        'day_of_week': day_of_week,
-        'is_weekend': is_weekend,
-        'month': month
+    return pd.DataFrame([{
+        'temperature': float(temperature),
+        'rain_mm': float(rain_mm),
+        'vacation': int(vacation),
+        'event': int(event),
+        'campaign': int(campaign),
+        'lag_1': float(lag_1),
+        'lag_7': float(lag_7),
+        'roll_3': float(roll_3),
+        'roll_7': float(roll_7),
+        'day_of_week': int(day_of_week),
+        'is_weekend': int(is_weekend),
+        'month': int(month)
     }])
 
+def generate_daily_prediction():
+    today = datetime.today().strftime('%Y-%m-%d')
+    print(f"[{datetime.now()}] Generating prediction for {today}...")
+
+    temperature, rain_mm = get_today_weather()
+    vacation = is_vacation_today()
+    event = is_event_today()
+    campaign = 0
+
+    df = create_features(temperature, rain_mm, vacation, event, campaign)
     prediction = int(model.predict(df)[0])
 
     try:
         preds = pd.read_csv(PREDICTIONS_PATH)
     except FileNotFoundError:
-        preds = pd.DataFrame(columns=['Date','temperature','rain_mm','vacation','event','campaign','day_of_week','is_weekend','month','predicted_visitors'])
+        preds = pd.DataFrame(columns=['Date','temperature','rain_mm','vacation','event','campaign',
+                                      'day_of_week','is_weekend','month','predicted_visitors'])
 
     preds = preds[preds['Date'] != today]
-    new_row = pd.DataFrame([{
-        'Date': today,
-        'temperature': temperature,
-        'rain_mm': rain_mm,
-        'vacation': vacation,
-        'event': event,
-        'campaign': campaign,
-        'day_of_week': day_of_week,
-        'is_weekend': is_weekend,
-        'month': month,
-        'predicted_visitors': prediction
-    }])
+    new_row = df.copy()
+    new_row['Date'] = today
+    new_row['predicted_visitors'] = prediction
     preds = pd.concat([preds, new_row], ignore_index=True)
     preds.to_csv(PREDICTIONS_PATH, index=False)
 
@@ -123,31 +122,15 @@ def predict_today():
 def predict_custom():
     try:
         data = request.get_json(force=True)
-        temperature = float(data.get('temperature', 20))
-        rain_mm = float(data.get('rain_mm', 0))
-        vacation = int(data.get('vacation', 0))
-        event = int(data.get('event', 0))
-        campaign = int(data.get('campaign', 0))
+        temperature = data.get('temperature', 20)
+        rain_mm = data.get('rain_mm', 0)
+        vacation = data.get('vacation', 0)
+        event = data.get('event', 0)
+        campaign = data.get('campaign', 0)
+        day_of_week = data.get('day_of_week')
+        month = data.get('month')
 
-        day_of_week = datetime.today().weekday()
-        is_weekend = 1 if day_of_week in [5,6] else 0
-        month = datetime.today().month
-
-        df = pd.DataFrame([{
-            'temperature': temperature,
-            'rain_mm': rain_mm,
-            'vacation': vacation,
-            'event': event,
-            'campaign': campaign,
-            'lag_1': historical['visitors'].iloc[-1],
-            'lag_7': historical['visitors'].iloc[-7] if len(historical) >= 7 else historical['visitors'].iloc[-1],
-            'roll_3': historical['visitors'].iloc[-3:].mean() if len(historical) >= 3 else historical['visitors'].iloc[-1],
-            'roll_7': historical['visitors'].iloc[-7:].mean() if len(historical) >= 7 else historical['visitors'].iloc[-1],
-            'day_of_week': day_of_week,
-            'is_weekend': is_weekend,
-            'month': month
-        }])
-
+        df = create_features(temperature, rain_mm, vacation, event, campaign, day_of_week, month)
         prediction = int(model.predict(df)[0])
         return jsonify({'predicted_visitors': prediction})
     except Exception as e:

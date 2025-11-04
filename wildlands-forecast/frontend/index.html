@@ -6,9 +6,8 @@
 <title>Wildlands Bezoekersvoorspelling</title>
 <style>
   body { font-family: 'Segoe UI', sans-serif; background: url('wildlands_background.jpg') no-repeat center center fixed; background-size: cover; color: white; text-align: center; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; margin: 0; padding-top: 60px; padding-bottom: 60px; }
-  .logo { width: 36%; max-width: 420px; height: auto; margin-top: 0; margin-bottom: 60px; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5)); transition: transform 0.4s ease; }
-  .logo:hover { transform: scale(1.03); }
-  .card { background: rgba(0, 50, 0, 0.5); border-radius: 25px; padding: 50px 40px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35); text-align: center; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); max-width: 450px; width: 100%; transition: transform 0.3s ease; }
+  .logo { width: 36%; max-width: 420px; height: auto; margin-bottom: 60px; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5)); transition: transform 0.4s ease; }
+  .card { background: rgba(0, 50, 0, 0.5); border-radius: 25px; padding: 50px 40px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35); text-align: center; backdrop-filter: blur(15px); max-width: 450px; width: 100%; transition: transform 0.3s ease; }
   .card:hover { transform: scale(1.01); }
   .card h1 { font-size: 2.4em; margin-bottom: 25px; color: #ffffff; text-shadow: 2px 2px 6px rgba(0,0,0,0.4); }
   .visitors-line { font-size: 3em; font-weight: 600; color: #ffe066; text-shadow: 2px 2px 8px rgba(0,0,0,0.4); margin-bottom: 25px; }
@@ -35,6 +34,17 @@
       <label>🏖️ Vakantie? <select id="input-vacation"><option value="0">Nee</option><option value="1">Ja</option></select></label><br><br>
       <label>🎉 Evenement? <select id="input-event"><option value="0">Nee</option><option value="1">Ja</option></select></label><br><br>
       <label>📢 Campagne? <select id="input-campaign"><option value="0">Nee</option><option value="1">Ja</option></select></label><br><br>
+      <label>📅 Dag van de week:
+        <select id="input-day">
+          <option value="0">Maandag</option>
+          <option value="1">Dinsdag</option>
+          <option value="2">Woensdag</option>
+          <option value="3">Donderdag</option>
+          <option value="4">Vrijdag</option>
+          <option value="5">Zaterdag</option>
+          <option value="6">Zondag</option>
+        </select>
+      </label><br><br>
       <button onclick="predictCustom()">Voorspel bezoekers</button>
     </div>
     <div id="custom-prediction" style="margin-top: 15px; font-size: 1.5em;"></div>
@@ -70,12 +80,13 @@ async function predictCustom() {
   const vacation = parseInt(document.getElementById('input-vacation').value);
   const event = parseInt(document.getElementById('input-event').value);
   const campaign = parseInt(document.getElementById('input-campaign').value);
+  const day_of_week = parseInt(document.getElementById('input-day').value);
 
   try {
     const res = await fetch('http://127.0.0.1:5000/api/predict_custom', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({temperature: temp, rain_mm: rain, vacation, event, campaign})
+      body: JSON.stringify({temperature: temp, rain_mm: rain, vacation, event, campaign, day_of_week})
     });
     const data = await res.json();
     document.getElementById('custom-prediction').innerText =
