@@ -2,7 +2,8 @@ import pandas as pd
 from datetime import datetime
 import os
 
-VACATIONS_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'vacations.csv')
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # twee niveaus omhoog
+VACATIONS_PATH = os.path.join(BASE_DIR, 'data', 'vacations.csv')
 
 def is_vacation_today(date=None):
     today = datetime.today().date() if date is None else pd.to_datetime(date).date()

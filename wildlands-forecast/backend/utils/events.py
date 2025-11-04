@@ -2,7 +2,8 @@ import pandas as pd
 from datetime import datetime
 import os
 
-EVENTS_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'events.csv')
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # twee niveaus omhoog
+EVENTS_PATH = os.path.join(BASE_DIR, 'data', 'events.csv')
 
 def is_event_today(date=None):
     today = datetime.today().date() if date is None else pd.to_datetime(date).date()
