@@ -55,7 +55,7 @@ visitor_filtered <- filter_dates(visitor)
 visitor <- add_weather(visitor_filtered)
 
 colnames(visitor) <- c("Ticket ID","Type of Ticket", "Date", "Nr Used Entrances", "Holiday_Netherlands", "Holiday_Germany", "Event", "Temperature (mean)", "Precipitation (sum)")
-View(visitor)
+#View(visitor)
 
 
 
@@ -256,4 +256,67 @@ visitor <- visitor %>%
     Campaign_Germany = replace_na(Campaign_Germany, "0")
   )
   
+View(visitor)
+
+write.csv(visitor, file = "visitor.csv", row.names = TRUE)
+
+
+# add budget column
+budget <- read.csv("budget.csv")
+colnames(budget) <- c("Date", "Type of Ticket", "Budget")
+budget <- budget %>%
+  mutate(
+    Date = format(mdy(Date), "%Y-%m-%d")
+  )
+budget <- filter_dates(budget, Date, "2023-01-01", "2025-12-31")
+
+# each type of ticket was written in at least 3 ways
+# cleaning part
+library(stringr)
+budget <- budget %>%
+  mutate('Type of Ticket' = case_when(
+    str_detect(`Type of Ticket`, "Group|Groep") ~ "Groepen",
+    str_detect(`Type of Ticket`, "Gratis") ~ "Gratis", 
+    str_detect(`Type of Ticket`, "Actie") ~ "Actie",
+    str_detect(`Type of Ticket`, "Vol | Betalend") ~ "Vol betalend",
+    str_detect(`Type of Ticket`, "Accomodatie|Accomodatiehouder") ~ "Accomodatie", 
+    str_detect(`Type of Ticket`, "Abonnement") ~ "Abonnement",
+    str_detect(`Type of Ticket`, "Evenementen") ~ "Evenementen",
+    TRUE ~ `Type of Ticket`
+  ))
+
+visitor <- visitor %>%
+  mutate('Type of Ticket' = case_when(
+    str_detect(`Type of Ticket`, "Group|Groep") ~ "Groepen",
+    str_detect(`Type of Ticket`, "Gratis") ~ "Gratis", 
+    str_detect(`Type of Ticket`, "Actie") ~ "Actie",
+    str_detect(`Type of Ticket`, "Vol betalend | Betalend") ~ "Vol betalend",
+    str_detect(`Type of Ticket`, "Accommodatie|Accommodatiehouder e-tickets") ~ "Accommodatie", 
+    str_detect(`Type of Ticket`, "Abonnement") ~ "Abonnement",
+    str_detect(`Type of Ticket`, "Evenementen") ~ "Evenementen",
+    str_detect(`Type of Ticket`, "Inkoop") ~ "Inkoop",
+    TRUE ~ `Type of Ticket`
+  ))
+
+
+View(budget)
+
+
+# Aggregate visitor data - sum Nr Used Entrances and keep one row per date+ticket
+visitor <- visitor %>%
+  group_by(Date, `Type of Ticket`) %>%
+  summarise(
+    `Nr Used Entrances` = sum(`Nr Used Entrances`, na.rm = TRUE),
+    # For non-numeric columns, take the first value (or most appropriate)
+    across(c(Holiday_Germany, Holiday_Netherlands, Event, 
+             Campaign_Netherlands, Campaign_Germany, `Precipitation (sum)`, `Temperature (mean)`), first),
+    .groups = "drop"
+  )
+visitor <- left_join(visitor, budget, by = c("Date", "Type of Ticket"))
+
+
+# add nr used entrances for inkoop tickets to budget
+visitor <- visitor %>%
+  mutate(Budget = ifelse(is.na(Budget), `Nr Used Entrances`, Budget))
+
 View(visitor)
