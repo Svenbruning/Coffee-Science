@@ -1,3 +1,3 @@
-Date,temperature,rain_mm,vacation,event,campaign,predicted_visitors,lag_1,lag_7,roll_3,roll_7,day_of_week,is_weekend,month
-2025-10-31,12.1,0.0,0,0,0,3803,,,,,,,
-2025-11-04,15.2,0.0,0,0,0,3802,6334.0,1269.0,3926.6666666666665,2744.714285714286,1.0,0.0,11.0
+Date,temperature,rain_mm,vacation,event,campaign,day_of_week,is_weekend,month,predicted_visitors,lag_1,lag_7,roll_3,roll_7
+2025-11-20,3.5,0.0,0,0,0,3,0,11,5971,6334.0,1269.0,3926.6666666666665,2744.714285714286
+2025-11-21,3.7,0.0,0,0,0,4,0,11,5922,6334.0,1269.0,3926.6666666666665,2744.714285714286
