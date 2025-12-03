@@ -22,7 +22,7 @@ PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'daily_predictions.csv')
 WEEKLY_PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'weekly_predictions.csv')
 MONTHLY_PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'monthly_predictions.csv')
 
-# -------- Model & historische data --------
+# -------- Model & historical data --------
 model = joblib.load(MODEL_PATH)
 historical = pd.read_csv(DATA_PATH)
 
@@ -47,9 +47,7 @@ historical['month'] = historical['date'].dt.month
 # -------- Helpers --------
 def create_features(temperature, rain_mm, vacation, event, campaign,
                     day_of_week=None, month=None):
-    """
-    Bouw exact dezelfde features als bij training.
-    """
+
     last_day = historical.iloc[-1]
     lag_1 = last_day['visitors']
     lag_7 = historical['visitors'].iloc[-7] if len(historical) >= 7 else lag_1
@@ -82,15 +80,15 @@ def create_features(temperature, rain_mm, vacation, event, campaign,
 def get_monday_of_current_week(today=None):
     if today is None:
         today = date.today()
-    weekday = today.isoweekday()  # 1 = maandag
+    weekday = today.isoweekday()
     monday = today - timedelta(days=weekday - 1)
     return monday
 
 
-# -------- Dagvoorspelling --------
+# -------- Daily prediction --------
 def generate_daily_prediction():
     today_str = datetime.today().strftime('%Y-%m-%d')
-    print(f"[{datetime.now()}] Generating daily prediction for {today_str}...")
+    print(f"[{datetime.now()}] DAILY → generating prediction for {today_str}")
 
     temperature, rain_mm = get_today_weather()
     vacation = is_vacation_today()
@@ -116,20 +114,17 @@ def generate_daily_prediction():
     preds = pd.concat([preds, new_row], ignore_index=True)
     preds.to_csv(PREDICTIONS_PATH, index=False)
 
-    print(f"✅ Daily prediction for {today_str}: {prediction} visitors saved.")
     return prediction
 
 
-# -------- Weekvoorspelling (1x per week) --------
+# -------- Weekly prediction --------
 def generate_weekly_prediction(force=False):
     today = date.today()
     monday = get_monday_of_current_week(today)
-    sunday = monday + timedelta(days=6)
     week_key = monday.strftime('%Y-%m-%d')
 
-    print(f"[{datetime.now()}] Generating weekly prediction for week starting {week_key}...")
+    print(f"[{datetime.now()}] WEEK → generating week {week_key}")
 
-    # Bestaande weekly predictions laden
     try:
         weekly = pd.read_csv(WEEKLY_PREDICTIONS_PATH)
     except FileNotFoundError:
@@ -138,65 +133,53 @@ def generate_weekly_prediction(force=False):
             'vacation', 'event', 'campaign', 'predicted_visitors'
         ])
 
-    # Als deze week al bestaat en niet geforceerd: klaar
     if not force and not weekly.empty and (weekly['week_start'] == week_key).any():
-        print(f"ℹ️ Weekly prediction for week {week_key} already exists, skipping.")
+        print("WEEK → already exists, skip.")
         return
 
-    # Weer voor de hele week ophalen (ma–zo)
-    week_weather = get_week_weather(monday)  # lijst van 7 dicts
+    week_weather = get_week_weather(monday)
 
     rows = []
     for i in range(7):
-        target_date = monday + timedelta(days=i)
+        d = monday + timedelta(days=i)
         ww = week_weather[i]
-        temp = ww["temperature"]
-        rain = ww["rain_mm"]
-
-        vacation = is_vacation_today(target_date)
-        event = is_event_today(target_date)
-        campaign = 0
 
         df_features = create_features(
-            temp,
-            rain,
-            vacation,
-            event,
-            campaign,
-            day_of_week=target_date.weekday(),
-            month=target_date.month
+            ww["temperature"],
+            ww["rain_mm"],
+            is_vacation_today(d),
+            is_event_today(d),
+            0,
+            day_of_week=d.weekday(),
+            month=d.month
         )
-        pred_value = int(model.predict(df_features)[0])
+
+        pred = int(model.predict(df_features)[0])
 
         rows.append({
             'week_start': week_key,
-            'date': target_date.strftime('%Y-%m-%d'),
-            'temperature': temp,
-            'rain_mm': rain,
-            'vacation': vacation,
-            'event': event,
-            'campaign': campaign,
-            'predicted_visitors': pred_value
+            'date': d.strftime('%Y-%m-%d'),
+            'temperature': ww["temperature"],
+            'rain_mm': ww["rain_mm"],
+            'vacation': is_vacation_today(d),
+            'event': is_event_today(d),
+            'campaign': 0,
+            'predicted_visitors': pred
         })
 
     weekly = weekly[weekly['week_start'] != week_key]
     weekly = pd.concat([weekly, pd.DataFrame(rows)], ignore_index=True)
     weekly.to_csv(WEEKLY_PREDICTIONS_PATH, index=False)
 
-    print(f"✅ Weekly prediction for week {week_key} saved.")
 
-
-# -------- Maandvoorspelling (1x per maand) --------
+# -------- Monthly prediction --------
 def generate_monthly_prediction(force=False):
     today = date.today()
     month_start = date(today.year, today.month, 1)
-    year = month_start.year
-    month = month_start.month
     month_key = month_start.strftime('%Y-%m-01')
 
-    print(f"[{datetime.now()}] Generating monthly prediction for {year}-{month:02d}...")
+    print(f"[{datetime.now()}] MONTH → generating month {month_key}")
 
-    # Bestaande monthly predictions laden
     try:
         monthly = pd.read_csv(MONTHLY_PREDICTIONS_PATH)
     except FileNotFoundError:
@@ -206,54 +189,44 @@ def generate_monthly_prediction(force=False):
         ])
 
     if not force and not monthly.empty and (monthly['month_start'] == month_key).any():
-        print(f"ℹ️ Monthly prediction for {month_key} already exists, skipping.")
+        print("MONTH → already exists, skip.")
         return
 
-    # Weer voor de hele maand ophalen
-    month_weather = get_month_weather(year, month)
+    weather = get_month_weather(month_start.year, month_start.month)
 
     rows = []
-    for day_info in month_weather:
-        d_str = day_info["date"]
-        day_date = datetime.strptime(d_str, "%Y-%m-%d").date()
-
-        temp = day_info["temperature"]
-        rain = day_info["rain_mm"]
-
-        vacation = is_vacation_today(day_date)
-        event = is_event_today(day_date)
-        campaign = 0
+    for d in weather:
+        dt = datetime.strptime(d["date"], "%Y-%m-%d").date()
 
         df_features = create_features(
-            temp,
-            rain,
-            vacation,
-            event,
-            campaign,
-            day_of_week=day_date.weekday(),
-            month=day_date.month
+            d["temperature"],
+            d["rain_mm"],
+            is_vacation_today(dt),
+            is_event_today(dt),
+            0,
+            day_of_week=dt.weekday(),
+            month=dt.month
         )
-        pred_value = int(model.predict(df_features)[0])
+
+        pred = int(model.predict(df_features)[0])
 
         rows.append({
             'month_start': month_key,
-            'date': d_str,
-            'temperature': temp,
-            'rain_mm': rain,
-            'vacation': vacation,
-            'event': event,
-            'campaign': campaign,
-            'predicted_visitors': pred_value
+            'date': d["date"],
+            'temperature': d["temperature"],
+            'rain_mm': d["rain_mm"],
+            'vacation': is_vacation_today(dt),
+            'event': is_event_today(dt),
+            'campaign': 0,
+            'predicted_visitors': pred
         })
 
     monthly = monthly[monthly['month_start'] != month_key]
     monthly = pd.concat([monthly, pd.DataFrame(rows)], ignore_index=True)
     monthly.to_csv(MONTHLY_PREDICTIONS_PATH, index=False)
 
-    print(f"✅ Monthly prediction for {month_key} saved.")
 
-
-# -------- API endpoints --------
+# -------- API --------
 @app.route('/api/predict_today', methods=['GET'])
 def predict_today():
     today_str = datetime.today().strftime('%Y-%m-%d')
@@ -261,17 +234,17 @@ def predict_today():
         preds = pd.read_csv(PREDICTIONS_PATH)
         row = preds[preds['Date'] == today_str]
         if not row.empty:
-            result = row.iloc[0]
+            r = row.iloc[0]
             return jsonify({
-                'date': result['Date'],
-                'temperature': float(result['temperature']),
-                'rain_mm': float(result['rain_mm']),
-                'vacation': bool(result['vacation']),
-                'event': bool(result['event']),
-                'campaign': bool(result['campaign']),
-                'predicted_visitors': int(result['predicted_visitors'])
+                'date': r['Date'],
+                'temperature': float(r['temperature']),
+                'rain_mm': float(r['rain_mm']),
+                'vacation': bool(r['vacation']),
+                'event': bool(r['event']),
+                'campaign': bool(r['campaign']),
+                'predicted_visitors': int(r['predicted_visitors'])
             })
-    except FileNotFoundError:
+    except:
         pass
 
     prediction = generate_daily_prediction()
@@ -279,49 +252,50 @@ def predict_today():
         'date': today_str,
         'temperature': None,
         'rain_mm': None,
-        'vacation': bool(is_vacation_today()),
-        'event': bool(is_event_today()),
+        'vacation': False,
+        'event': False,
         'campaign': False,
-        'predicted_visitors': int(prediction)
+        'predicted_visitors': prediction
     })
 
 
-@app.route('/api/predict_custom', methods=['POST'])
+@app.route('/api/predict_custom', methods=['POST', 'OPTIONS'])
 def predict_custom():
+
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
     try:
         data = request.get_json(force=True)
-        temperature = data.get('temperature', 20)
-        rain_mm = data.get('rain_mm', 0)
-        vacation = data.get('vacation', 0)
-        event = data.get('event', 0)
-        campaign = data.get('campaign', 0)
-        day_of_week = data.get('day_of_week')
-        month = data.get('month')
 
-        df = create_features(temperature, rain_mm, vacation, event, campaign,
-                             day_of_week, month)
-        prediction = int(model.predict(df)[0])
-        return jsonify({'predicted_visitors': prediction})
+        df = create_features(
+            data.get('temperature', 20),
+            data.get('rain_mm', 0),
+            data.get('vacation', 0),
+            data.get('event', 0),
+            data.get('campaign', 0),
+            day_of_week=data.get('day_of_week'),
+            month=data.get('month')
+        )
+
+        pred = int(model.predict(df)[0])
+        return jsonify({'predicted_visitors': pred})
+
     except Exception as e:
-        print("Error in /api/predict_custom:", e)
+        print("Error in predict_custom:", e)
         return jsonify({'error': str(e)}), 400
 
 
 @app.route('/api/predict_week', methods=['GET'])
 def predict_week():
-    """Geeft de voorspelling voor de huidige week (ma–zo)."""
     today = date.today()
     monday = get_monday_of_current_week(today)
-    sunday = monday + timedelta(days=6)
     week_key = monday.strftime('%Y-%m-%d')
 
     try:
         weekly = pd.read_csv(WEEKLY_PREDICTIONS_PATH)
-    except FileNotFoundError:
-        weekly = pd.DataFrame(columns=[
-            'week_start', 'date', 'temperature', 'rain_mm',
-            'vacation', 'event', 'campaign', 'predicted_visitors'
-        ])
+    except:
+        weekly = pd.DataFrame()
 
     if weekly.empty or not (weekly['week_start'] == week_key).any():
         generate_weekly_prediction(force=True)
@@ -332,19 +306,18 @@ def predict_week():
 
     iso_year, iso_week, _ = monday.isocalendar()
 
-    days = []
-    weekday_names_nl = [
+    weekday_names = [
         'Maandag', 'Dinsdag', 'Woensdag',
         'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'
     ]
 
+    days = []
     for _, row in this_week.iterrows():
-        day_date = datetime.strptime(row['date'], '%Y-%m-%d').date()
-        weekday_idx = day_date.weekday()
+        dt = datetime.strptime(row['date'], '%Y-%m-%d').date()
 
         days.append({
             'date': row['date'],
-            'weekday': weekday_names_nl[weekday_idx],
+            'weekday': weekday_names[dt.weekday()],
             'temperature': float(row['temperature']),
             'rain_mm': float(row['rain_mm']),
             'vacation': bool(row['vacation']),
@@ -355,7 +328,7 @@ def predict_week():
 
     return jsonify({
         'week_start': monday.strftime('%Y-%m-%d'),
-        'week_end': sunday.strftime('%Y-%m-%d'),
+        'week_end': (monday + timedelta(days=6)).strftime('%Y-%m-%d'),
         'iso_week': iso_week,
         'year': iso_year,
         'days': days
@@ -364,66 +337,56 @@ def predict_week():
 
 @app.route('/api/predict_month', methods=['GET'])
 def predict_month():
-    """Geeft de voorspelling (totaal) voor de huidige maand."""
     today = date.today()
     month_start = date(today.year, today.month, 1)
-    year = month_start.year
-    month = month_start.month
-    month_key = month_start.strftime('%Y-%m-01')
+    month_key = month_start.strftime('%Y-%m-%d')
 
     try:
         monthly = pd.read_csv(MONTHLY_PREDICTIONS_PATH)
-    except FileNotFoundError:
-        monthly = pd.DataFrame(columns=[
-            'month_start', 'date', 'temperature', 'rain_mm',
-            'vacation', 'event', 'campaign', 'predicted_visitors'
-        ])
+    except:
+        monthly = pd.DataFrame()
 
     if monthly.empty or not (monthly['month_start'] == month_key).any():
         generate_monthly_prediction(force=True)
         monthly = pd.read_csv(MONTHLY_PREDICTIONS_PATH)
 
-    this_month = monthly[monthly['month_start'] == month_key].copy()
-    total_visitors = int(this_month['predicted_visitors'].sum()) if not this_month.empty else 0
+    this_month = monthly[monthly['month_start'] == month_key]
 
-    # maandnaam NL
-    month_names_nl = [
+    total = int(this_month['predicted_visitors'].sum()) if not this_month.empty else 0
+
+    month_names = [
         "", "januari", "februari", "maart", "april", "mei", "juni",
         "juli", "augustus", "september", "oktober", "november", "december"
     ]
-    month_name = month_names_nl[month]
 
     # laatste dag van de maand
-    if month == 12:
-        month_end = date(year + 1, 1, 1) - timedelta(days=1)
+    if today.month == 12:
+        month_end = date(today.year + 1, 1, 1) - timedelta(days=1)
     else:
-        month_end = date(year, month + 1, 1) - timedelta(days=1)
+        month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
 
     return jsonify({
         'month_start': month_start.strftime('%Y-%m-%d'),
         'month_end': month_end.strftime('%Y-%m-%d'),
-        'year': year,
-        'month': month,
-        'month_name': month_name,
-        'total_predicted_visitors': total_visitors
+        'year': month_start.year,
+        'month': month_start.month,
+        'month_name': month_names[month_start.month],
+        'total_predicted_visitors': total
     })
 
 
 # -------- Scheduler --------
 scheduler = BackgroundScheduler(daemon=True)
-
-# Dagelijkse voorspelling om 08:00
 scheduler.add_job(generate_daily_prediction, 'cron', hour=8, minute=0)
-
-# Wekelijkse voorspelling iedere maandag 00:01
-scheduler.add_job(generate_weekly_prediction, 'cron',
-                  day_of_week='mon', hour=0, minute=1)
-
-# Maandelijkse voorspelling op de 1e dag van de maand om 00:05
-scheduler.add_job(generate_monthly_prediction, 'cron',
-                  day=1, hour=0, minute=5)
-
+scheduler.add_job(generate_weekly_prediction, 'cron', day_of_week='mon', hour=0, minute=1)
+scheduler.add_job(generate_monthly_prediction, 'cron', day=1, hour=0, minute=5)
 scheduler.start()
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+if __name__ == "__main__":
+    print("→ Running Wildlands Prediction Backend")
+    print("→ Auto-generating daily, weekly & monthly predictions…")
+    generate_daily_prediction()
+    generate_weekly_prediction()
+    generate_monthly_prediction()
+    app.run(host="0.0.0.0", port=5000, debug=True)
