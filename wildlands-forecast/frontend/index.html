@@ -1,281 +1,130 @@
+<!-- web/index.html -->
 <!DOCTYPE html>
 <html lang="nl">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Wildlands Bezoekersvoorspelling</title>
-
 <style>
-  body {
-    font-family: 'Segoe UI', sans-serif;
-    background: url('wildlands_background.jpg') no-repeat center center fixed;
-    background-size: cover;
-    color: white;
-    text-align: center;
-    margin: 0;
-    padding: 25px 0 50px 0;
-  }
-
-  .logo {
-    width: 30%;
-    max-width: 380px;
-    margin-bottom: 20px;
-  }
-
-  .grid-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
-    gap: 20px;
-    width: 85%;
-    max-width: 1100px;
-    margin: 0 auto;
-    margin-top: 5px;
-  }
-
-  .card {
-    background: rgba(0, 50, 0, 0.5);
-    border-radius: 18px;
-    padding: 25px;
-    box-shadow: 0 5px 18px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(12px);
-  }
-
-  .card h1, .card h2 {
-    margin-top: 0;
-    text-shadow: 2px 2px 5px rgba(0,0,0,0.35);
-  }
-
-  .visitors-line {
-    font-size: 2em;
-    font-weight: 600;
-    color: #ffe066;
-    margin-bottom: 20px;
-  }
-
-  .weather {
-    font-size: 1.2em;
-    margin-bottom: 15px;
-  }
-
-  .clock {
-    font-size: 1.2em;
-    margin-bottom: 20px;
-  }
-
-  .week-list {
-    list-style: none;
-    padding: 0;
-    font-size: 1em;
-    margin-bottom: 15px;
-  }
-
-  .week-list li {
-    padding: 5px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.15);
-  }
-
-  .week-total {
-    font-size: 1.3em;
-    font-weight: bold;
-    color: #ffe066;
-    margin-top: 12px;
-  }
-
-  .month-total {
-    font-size: 1.4em;
-    font-weight: bold;
-    color: #ffe066;
-    margin-top: 15px;
-  }
-
-  .footer {
-    margin-top: 40px;
-    opacity: 0.85;
-  }
+  body { font-family: 'Segoe UI', sans-serif; background: url('wildlands_background.jpg') no-repeat center center fixed;
+         background-size: cover; color: white; text-align: center; margin: 0; padding: 25px 0 50px 0; }
+  .logo { width: 30%; max-width: 380px; margin-bottom: 20px; }
+  .grid-container { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto;
+                    gap: 20px; width: 85%; max-width: 1100px; margin: 0 auto; margin-top: 5px; }
+  .card { background: rgba(0, 50, 0, 0.5); border-radius: 18px; padding: 25px;
+          box-shadow: 0 5px 18px rgba(0, 0, 0, 0.3); backdrop-filter: blur(12px); }
+  .card h1 { margin-top: 0; text-shadow: 2px 2px 5px rgba(0,0,0,0.35); }
+  .visitors-line { font-size: 2em; font-weight: 600; color: #ffe066; margin-bottom: 20px; }
+  .weather { font-size: 1.2em; margin-bottom: 15px; }
+  .clock { font-size: 1.2em; margin-bottom: 20px; }
+  .week-list { list-style: none; padding: 0; font-size: 1em; margin-bottom: 15px; }
+  .week-list li { padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.15); }
+  .week-total { font-size: 1.3em; font-weight: bold; color: #ffe066; margin-top: 12px; }
+  .month-total { font-size: 1.4em; font-weight: bold; color: #ffe066; margin-top: 15px; }
+  .footer { margin-top: 40px; opacity: 0.85; }
 </style>
 </head>
-
 <body>
 <img src="wildlands_logo.png" class="logo">
-
 <div class="grid-container">
-
-  <!-- 1. LINKSBOVEN — DAGELIJKSE VOORSPELLING -->
   <div class="card">
     <h1>Dagelijkse voorspelling</h1>
     <div id="visitors-line" class="visitors-line">Vandaag verwacht: -- bezoekers</div>
     <div id="weather" class="weather">Weerdata ophalen...</div>
     <div id="clock" class="clock"></div>
   </div>
-
-  <!-- 2. RECHTSBOVEN — AANGEPASTE VOORSPELLING -->
   <div class="card">
     <h1>Aangepaste voorspelling</h1>
-
-    <label>🌡️ Temperatuur (°C):
-      <input type="number" id="input-temp" value="20">
-    </label><br><br>
-
-    <label>☔ Regen (mm):
-      <input type="number" id="input-rain" value="0">
-    </label><br><br>
-
+    <label>🌡️ Temperatuur (°C): <input type="number" id="input-temp" value="20"></label><br><br>
+    <label>☔ Regen (mm): <input type="number" id="input-rain" value="0"></label><br><br>
     <label>🏖️ Vakantie?
-      <select id="input-vacation">
-        <option value="0">Nee</option>
-        <option value="1">Ja</option>
-      </select>
+      <select id="input-vacation"><option value="0">Nee</option><option value="1">Ja</option></select>
     </label><br><br>
-
     <label>🎉 Evenement?
-      <select id="input-event">
-        <option value="0">Nee</option>
-        <option value="1">Ja</option>
-      </select>
+      <select id="input-event"><option value="0">Nee</option><option value="1">Ja</option></select>
     </label><br><br>
-
     <label>📢 Campagne?
-      <select id="input-campaign">
-        <option value="0">Nee</option>
-        <option value="1">Ja</option>
-      </select>
+      <select id="input-campaign"><option value="0">Nee</option><option value="1">Ja</option></select>
     </label><br><br>
-
     <label>📅 Dag van de week:
       <select id="input-day">
-        <option value="0">Maandag</option>
-        <option value="1">Dinsdag</option>
-        <option value="2">Woensdag</option>
-        <option value="3">Donderdag</option>
-        <option value="4">Vrijdag</option>
-        <option value="5">Zaterdag</option>
-        <option value="6">Zondag</option>
+        <option value="0">Maandag</option><option value="1">Dinsdag</option><option value="2">Woensdag</option>
+        <option value="3">Donderdag</option><option value="4">Vrijdag</option>
+        <option value="5">Zaterdag</option><option value="6">Zondag</option>
       </select>
     </label><br><br>
-
     <button onclick="predictCustom()">Voorspel bezoekers</button>
     <div id="custom-prediction" style="margin-top:20px;font-size:1.4em;"></div>
   </div>
-
-  <!-- 3. LINKSONDER — WEEKVOORSPELLING -->
   <div class="card">
     <h1 id="week-title">Wekelijkse voorspelling</h1>
     <ul id="week-list" class="week-list"></ul>
     <div id="week-total" class="week-total">Totaal deze week: -- bezoekers</div>
   </div>
-
-  <!-- 4. RECHTSONDER — MAANDVOORSPELLING -->
   <div class="card">
     <h1 id="month-title">Maandvoorspelling</h1>
     <p id="month-range">(Maand wordt geladen...)</p>
     <div id="month-total" class="month-total">Totaal deze maand: -- bezoekers</div>
   </div>
-
 </div>
-
-<div class="footer">
-  🌍 Wildlands Adventure Zoo Emmen — Dagelijkse, wekelijkse & maandelijkse bezoekersvoorspelling
-</div>
-
+<div class="footer">🌍 Wildlands Adventure Zoo Emmen — Dagelijkse, wekelijkse & maandelijkse bezoekersvoorspelling</div>
 <script>
+const API = "http://127.0.0.1:5000";
+
 async function loadPrediction() {
-  const res = await fetch("http://127.0.0.1:5000/api/predict_today");
+  const res = await fetch(`${API}/api/predict_today`);
   const data = await res.json();
-
   document.getElementById("visitors-line").innerText =
-    `Vandaag verwacht: ${data.predicted_visitors.toLocaleString()} bezoekers`;
-
+    `Vandaag verwacht: ${Number(data.predicted_visitors||0).toLocaleString()} bezoekers`;
   document.getElementById("weather").innerText =
-    `🌦️ Temp: ${data.temperature}°C | Regen: ${data.rain_mm} mm`;
+    `🌦️ Temp: ${data.temperature??'–'}°C | Regen: ${data.rain_mm??'–'} mm`;
 }
 
 async function loadWeekPrediction() {
-  const res = await fetch("http://127.0.0.1:5000/api/predict_week");
+  const res = await fetch(`${API}/api/predict_week`);
   const data = await res.json();
-
   document.getElementById("week-title").innerText =
     `Wekelijkse voorspelling   Week ${data.iso_week} (${data.year})`;
-
   const list = document.getElementById("week-list");
   list.innerHTML = "";
-
   let total = 0;
-
   data.days.forEach(day => {
     total += day.predicted_visitors;
     const li = document.createElement("li");
     const d = new Date(day.date);
-    li.textContent =
-      `${day.weekday} ${d.toLocaleDateString("nl-NL")} — 👥 ${day.predicted_visitors.toLocaleString()}`;
+    li.textContent = `${day.weekday} ${d.toLocaleDateString("nl-NL")} — 👥 ${day.predicted_visitors.toLocaleString()}`;
     list.appendChild(li);
   });
-
-  document.getElementById("week-total").innerText =
-    `Totaal deze week: ${total.toLocaleString()} bezoekers`;
+  document.getElementById("week-total").innerText = `Totaal deze week: ${total.toLocaleString()} bezoekers`;
 }
 
 async function loadMonthPrediction() {
-  const res = await fetch("http://127.0.0.1:5000/api/predict_month");
+  const res = await fetch(`${API}/api/predict_month`);
   const data = await res.json();
-
-  document.getElementById("month-title").innerText =
-    `Maandelijkse voorspelling   ${data.month_name} ${data.year}`;
-
+  document.getElementById("month-title").innerText = `Maandelijkse voorspelling   ${data.month_name} ${data.year}`;
   document.getElementById("month-range").innerText =
     `Periode: ${new Date(data.month_start).toLocaleDateString("nl-NL")} t/m ${new Date(data.month_end).toLocaleDateString("nl-NL")}`;
-
   document.getElementById("month-total").innerText =
     `Totaal verwacht deze maand: ${data.total_predicted_visitors.toLocaleString()} bezoekers`;
 }
 
-function updateClock() {
-  document.getElementById("clock").innerText =
-    new Date().toLocaleTimeString("nl-NL");
-}
+function updateClock() { document.getElementById("clock").innerText = new Date().toLocaleTimeString("nl-NL"); }
 
 async function predictCustom() {
-  const temp       = parseFloat(document.getElementById('input-temp').value);
-  const rain       = parseFloat(document.getElementById('input-rain').value);
-  const vacation   = parseInt(document.getElementById('input-vacation').value);
-  const event      = parseInt(document.getElementById('input-event').value);
-  const campaign   = parseInt(document.getElementById('input-campaign').value);
-  const day_of_week= parseInt(document.getElementById('input-day').value);
-
-  const payload = {
-    temperature: temp,
-    rain_mm: rain,
-    vacation,
-    event,
-    campaign,
-    day_of_week
-  };
-
-  const res = await fetch("http://127.0.0.1:5000/api/predict_custom", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-
+  const temp = parseFloat(document.getElementById('input-temp').value);
+  const rain = parseFloat(document.getElementById('input-rain').value);
+  const vacation = parseInt(document.getElementById('input-vacation').value);
+  const event = parseInt(document.getElementById('input-event').value);
+  const campaign = parseInt(document.getElementById('input-campaign').value);
+  const day_of_week = parseInt(document.getElementById('input-day').value);
+  const payload = { temperature: temp, rain_mm: rain, vacation, event, campaign, day_of_week };
+  const res = await fetch(`${API}/api/predict_custom`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const data = await res.json();
-
-  if (data.error) {
-    document.getElementById("custom-prediction").innerText =
-      "⚠️ Fout bij voorspelling";
-    return;
-  }
-
   document.getElementById("custom-prediction").innerText =
-    `Verwachte bezoekers: ${data.predicted_visitors.toLocaleString()}`;
+    data.error ? "⚠️ Fout bij voorspelling" : `Verwachte bezoekers: ${Number(data.predicted_visitors||0).toLocaleString()}`;
 }
-
-/* INIT */
-loadPrediction();
-loadWeekPrediction();
-loadMonthPrediction();
-setInterval(loadPrediction, 60000);
-setInterval(updateClock, 1000);
-updateClock();
+loadPrediction(); loadWeekPrediction(); loadMonthPrediction();
+setInterval(loadPrediction, 60000); setInterval(updateClock, 1000); updateClock();
 </script>
 </body>
 </html>

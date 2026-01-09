@@ -1,20 +1,22 @@
+# app.py
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
-import joblib
-import pandas as pd
-import os
-from datetime import datetime, date, timedelta
 
-from utils.weather import get_today_weather
-from utils.weather_week import get_week_weather
-from utils.weather_month import get_month_weather
-from utils.vacations import is_vacation_today
-from utils.events import is_event_today
+import os, joblib
+import pandas as pd
+import numpy as np
+from datetime import datetime, date, timedelta
+from typing import List, Dict, Tuple
+
+from utils.weather import get_weather_for_date, set_climatology_cache
+from utils.vacations import vacation_flag_on
+from utils.events import event_flag_on
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+# ------------------------------- Paths --------------------------------
 BASE_DIR = os.path.dirname(__file__)
 MODEL_PATH = os.path.join(BASE_DIR, '..', 'ml_model', 'model_lgb.pkl')
 DATA_PATH = os.path.join(BASE_DIR, '..', 'data', 'daily_visitors.csv')
@@ -22,10 +24,40 @@ PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'daily_predictions.csv')
 WEEKLY_PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'weekly_predictions.csv')
 MONTHLY_PREDICTIONS_PATH = os.path.join(BASE_DIR, '..', 'data', 'monthly_predictions.csv')
 
-# -------- Model & historical data --------
-model = joblib.load(MODEL_PATH)
-historical = pd.read_csv(DATA_PATH)
+# ---------------------------- IO helpers ------------------------------
+def _init_like(sample: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame(columns=sample.columns.tolist())
 
+def _safe_read_or_init(path: str, sample: pd.DataFrame) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(path)
+        df.columns = [c.lower() for c in df.columns]
+        cols = [c.lower() for c in sample.columns]
+        for c in cols:
+            if c not in df.columns:
+                df[c] = pd.Series(dtype=sample[c].dtype if c in sample.columns else "float64")
+        df = df[[c for c in cols]]
+        for c in df.columns:
+            if c in ["date", "week_start", "month_start"]:
+                df[c] = df[c].astype(str)
+        return df
+    except Exception:
+        return _init_like(sample)
+
+def _safe_write(path: str, df: pd.DataFrame) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_csv(path, index=False)
+
+def _csv_exists(path: str) -> bool:
+    return os.path.exists(path) and os.path.getsize(path) > 0
+
+# ---------------------- Load model + historical -----------------------
+bundle = joblib.load(MODEL_PATH)
+model = bundle["model"]
+FEATURES = bundle["features"]
+cal = bundle.get("calibration", {"a": 1.0, "b": 0.0})
+
+historical = pd.read_csv(DATA_PATH)
 historical.rename(columns={
     'Date': 'date',
     'Nr Used Entrances': 'visitors',
@@ -35,358 +67,362 @@ historical.rename(columns={
     'Event': 'event',
     'Campaign': 'campaign'
 }, inplace=True)
-
 historical['date'] = pd.to_datetime(historical['date'])
 historical = historical.sort_values('date')
+past_series_base = historical['visitors'].astype(float).tolist()
+LAST_HIST_DATE: date = historical['date'].max().date()
 
-historical['day_of_week'] = historical['date'].dt.weekday
-historical['is_weekend'] = historical['day_of_week'].isin([5, 6]).astype(int)
-historical['month'] = historical['date'].dt.month
+# --- klimatologie-cache (voor nette fallback) ---
+hist_md = historical.copy()
+hist_md['m'] = hist_md['date'].dt.month
+hist_md['d'] = hist_md['date'].dt.day
+CLIM = (
+    hist_md.groupby(['m', 'd'])[['temperature', 'rain_mm']]
+    .mean()
+    .rename(columns={'temperature': 'clim_temp', 'rain_mm': 'clim_rain'})
+)
+clim_cache = {(int(m), int(d)): (float(round(row['clim_temp'], 1)),
+                                 float(round(max(row['clim_rain'], 0.0), 1)))
+              for (m, d), row in CLIM.iterrows()}
+set_climatology_cache(clim_cache)
 
+# --------------------------- Time helpers -----------------------------
+def _weekday(d: date) -> int: return d.weekday()
+def _weekofyear(d: date) -> int: return d.isocalendar().week
+def _dayofyear(d: date) -> int: return d.timetuple().tm_yday
+def _is_weekend(dow: int) -> int: return int(dow in (5, 6))
+def _apply_calibration(y_hat: float) -> float:
+    a, b = cal.get("a", 1.0), cal.get("b", 0.0)
+    return a * y_hat + b
 
-# -------- Helpers --------
-def create_features(temperature, rain_mm, vacation, event, campaign,
-                    day_of_week=None, month=None):
+# -------------------------- Feature builder ---------------------------
+def _features_for_date(d: date, temp: float, rain: float,
+                       vac: int, evt: int, camp: int,
+                       series: List[float]) -> pd.DataFrame:
+    n = len(series)
+    lag1  = series[-1] if n >= 1 else 0.0
+    lag7  = series[-7] if n >= 7 else lag1
+    lag14 = series[-14] if n >= 14 else lag7
+    roll3  = float(np.mean(series[-3:]))  if n >= 1 else lag1
+    roll7  = float(np.mean(series[-7:]))  if n >= 1 else lag1
+    roll14 = float(np.mean(series[-14:])) if n >= 1 else lag1
 
-    last_day = historical.iloc[-1]
-    lag_1 = last_day['visitors']
-    lag_7 = historical['visitors'].iloc[-7] if len(historical) >= 7 else lag_1
-    roll_3 = historical['visitors'].iloc[-3:].mean() if len(historical) >= 3 else lag_1
-    roll_7 = historical['visitors'].iloc[-7:].mean() if len(historical) >= 7 else lag_1
+    dow = _weekday(d); month = d.month; woy = _weekofyear(d); doy = _dayofyear(d)
+    temp2 = temp ** 2
+    rain_log1p = float(np.log1p(max(rain, 0.0)))
+    weekend_temp = (1 if dow in (5, 6) else 0) * temp
 
-    if day_of_week is None:
-        day_of_week = datetime.today().weekday()
-    if month is None:
-        month = datetime.today().month
+    feat = {
+        'temperature': float(temp), 'rain_mm': float(rain),
+        'temp2': float(temp2), 'rain_log1p': rain_log1p, 'weekend_temp': float(weekend_temp),
+        'vacation': int(vac), 'event': int(evt), 'campaign': int(camp),
+        'lag_1': float(lag1), 'lag_7': float(lag7), 'lag_14': float(lag14),
+        'roll_3': float(roll3), 'roll_7': float(roll7), 'roll_14': float(roll14),
+        'day_of_week': int(dow), 'is_weekend': _is_weekend(dow),
+        'month': int(month), 'weekofyear': int(woy),
+        'sin_doy': float(np.sin(2 * np.pi * doy / 365.25)),
+        'cos_doy': float(np.cos(2 * np.pi * doy / 365.25)),
+    }
+    return pd.DataFrame([feat])[FEATURES]
 
-    is_weekend = 1 if day_of_week in [5, 6] else 0
+# --------------------- Exogenous (weer/vakantie/event) -----------------
+def _exo_for_date(d: date) -> Dict[str, float | int]:
+    t, r, _src = get_weather_for_date(d)
+    return {
+        "temperature": t,
+        "rain_mm": r,
+        "vacation": vacation_flag_on(d),
+        "event": event_flag_on(d),
+        "campaign": 0
+    }
 
-    return pd.DataFrame([{
-        'temperature': float(temperature),
-        'rain_mm': float(rain_mm),
-        'vacation': int(vacation),
-        'event': int(event),
-        'campaign': int(campaign),
-        'lag_1': float(lag_1),
-        'lag_7': float(lag_7),
-        'roll_3': float(roll_3),
-        'roll_7': float(roll_7),
-        'day_of_week': int(day_of_week),
-        'is_weekend': int(is_weekend),
-        'month': int(month)
-    }])
+# ----------------- Rolling helpers to align all endpoints --------------
+def _build_series_until(target: date) -> List[float]:
+    """
+    Vul 'gat-dagen' tussen LAST_HIST_DATE+1 en target-1 met modelvoorspellingen,
+    zodat lags overal identiek zijn.
+    """
+    series = past_series_base.copy()
+    cur = LAST_HIST_DATE + timedelta(days=1)
+    while cur <= target - timedelta(days=1):
+        exo = _exo_for_date(cur)
+        X = _features_for_date(cur, exo["temperature"], exo["rain_mm"],
+                               exo["vacation"], exo["event"], exo["campaign"],
+                               series)
+        y_raw = float(model.predict(X)[0])
+        y_hat = max(0.0, _apply_calibration(y_raw))
+        series.append(y_hat)
+        cur += timedelta(days=1)
+    return series
 
+def predict_range_aligned(dates: List[date]) -> pd.DataFrame:
+    dates = sorted(dates)
+    if not dates:
+        return pd.DataFrame()
 
-def get_monday_of_current_week(today=None):
-    if today is None:
-        today = date.today()
-    weekday = today.isoweekday()
-    monday = today - timedelta(days=weekday - 1)
-    return monday
+    series = _build_series_until(dates[0])
+    rows = []
+    prev = dates[0] - timedelta(days=1)
+    for d in dates:
+        gap_start = prev + timedelta(days=1)
+        if gap_start < d:
+            cur = gap_start
+            while cur <= d - timedelta(days=1):
+                exo_gap = _exo_for_date(cur)
+                X_gap = _features_for_date(cur, exo_gap["temperature"], exo_gap["rain_mm"],
+                                           exo_gap["vacation"], exo_gap["event"], exo_gap["campaign"],
+                                           series)
+                y_raw_gap = float(model.predict(X_gap)[0])
+                y_hat_gap = max(0.0, _apply_calibration(y_raw_gap))
+                series.append(y_hat_gap)
+                cur += timedelta(days=1)
 
+        exo = _exo_for_date(d)
+        X = _features_for_date(d, exo["temperature"], exo["rain_mm"],
+                               exo["vacation"], exo["event"], exo["campaign"],
+                               series)
+        y_raw = float(model.predict(X)[0])
+        y_hat = max(0.0, _apply_calibration(y_raw))
+        series.append(y_hat)
 
-# -------- Daily prediction --------
-def generate_daily_prediction():
-    today_str = datetime.today().strftime('%Y-%m-%d')
-    print(f"[{datetime.now()}] DAILY → generating prediction for {today_str}")
+        row = {"date": d.strftime('%Y-%m-%d'), **X.iloc[0].to_dict(),
+               "predicted_visitors": int(round(y_hat))}
+        rows.append(row)
+        prev = d
 
-    temperature, rain_mm = get_today_weather()
-    vacation = is_vacation_today()
-    event = is_event_today()
-    campaign = 0
+    return pd.DataFrame(rows)
 
-    df = create_features(temperature, rain_mm, vacation, event, campaign)
-    prediction = int(model.predict(df)[0])
+# --------------------------- Ranges utils ------------------------------
+def get_monday_of_current_week(today: date | None = None) -> date:
+    today = today or date.today()
+    return today - timedelta(days=today.isoweekday() - 1)
 
+def _month_range(today: date) -> Tuple[date, date]:
+    start = date(today.year, today.month, 1)
+    end = (date(today.year + (today.month // 12), ((today.month % 12) + 1), 1) - timedelta(days=1))
+    return start, end
+
+# --------------------------- Generators --------------------------------
+def generate_daily_prediction() -> Dict:
+    d = date.today()
+    df_new = predict_range_aligned([d])
+
+    preds = _safe_read_or_init(PREDICTIONS_PATH, df_new)
+    preds = preds[preds['date'] != df_new.iloc[0]['date']]
+    out = pd.concat([preds, df_new], ignore_index=True)
+    _safe_write(PREDICTIONS_PATH, out)
+    return df_new.iloc[0].to_dict()
+
+def _weekly_exists_for(week_key: str) -> bool:
+    if not _csv_exists(WEEKLY_PREDICTIONS_PATH):
+        return False
     try:
-        preds = pd.read_csv(PREDICTIONS_PATH)
-    except FileNotFoundError:
-        preds = pd.DataFrame(columns=[
-            'Date', 'temperature', 'rain_mm', 'vacation', 'event', 'campaign',
-            'day_of_week', 'is_weekend', 'month', 'predicted_visitors'
-        ])
+        df = pd.read_csv(WEEKLY_PREDICTIONS_PATH)
+        if "week_start" not in df.columns:
+            return False
+        return (df["week_start"].astype(str) == week_key).any()
+    except Exception:
+        return False
 
-    preds = preds[preds['Date'] != today_str]
-    new_row = df.copy()
-    new_row['Date'] = today_str
-    new_row['predicted_visitors'] = prediction
+def _monthly_exists_for(month_key: str) -> bool:
+    if not _csv_exists(MONTHLY_PREDICTIONS_PATH):
+        return False
+    try:
+        df = pd.read_csv(MONTHLY_PREDICTIONS_PATH)
+        if "month_start" not in df.columns:
+            return False
+        return (df["month_start"].astype(str) == month_key).any()
+    except Exception:
+        return False
 
-    preds = pd.concat([preds, new_row], ignore_index=True)
-    preds.to_csv(PREDICTIONS_PATH, index=False)
-
-    return prediction
-
-
-# -------- Weekly prediction --------
-def generate_weekly_prediction(force=False):
-    today = date.today()
-    monday = get_monday_of_current_week(today)
+def generate_weekly_prediction_if_missing() -> None:
+    monday = get_monday_of_current_week(date.today())
     week_key = monday.strftime('%Y-%m-%d')
+    if _weekly_exists_for(week_key):
+        return  # al aanwezig
 
-    print(f"[{datetime.now()}] WEEK → generating week {week_key}")
+    dates = [monday + timedelta(days=i) for i in range(7)]
+    df_week = predict_range_aligned(dates)
+    df_week.insert(0, 'week_start', week_key)
 
-    try:
-        weekly = pd.read_csv(WEEKLY_PREDICTIONS_PATH)
-    except FileNotFoundError:
-        weekly = pd.DataFrame(columns=[
-            'week_start', 'date', 'temperature', 'rain_mm',
-            'vacation', 'event', 'campaign', 'predicted_visitors'
-        ])
-
-    if not force and not weekly.empty and (weekly['week_start'] == week_key).any():
-        print("WEEK → already exists, skip.")
-        return
-
-    week_weather = get_week_weather(monday)
-
-    rows = []
-    for i in range(7):
-        d = monday + timedelta(days=i)
-        ww = week_weather[i]
-
-        df_features = create_features(
-            ww["temperature"],
-            ww["rain_mm"],
-            is_vacation_today(d),
-            is_event_today(d),
-            0,
-            day_of_week=d.weekday(),
-            month=d.month
-        )
-
-        pred = int(model.predict(df_features)[0])
-
-        rows.append({
-            'week_start': week_key,
-            'date': d.strftime('%Y-%m-%d'),
-            'temperature': ww["temperature"],
-            'rain_mm': ww["rain_mm"],
-            'vacation': is_vacation_today(d),
-            'event': is_event_today(d),
-            'campaign': 0,
-            'predicted_visitors': pred
-        })
-
+    sample = df_week.copy()
+    weekly = _safe_read_or_init(WEEKLY_PREDICTIONS_PATH, sample)
     weekly = weekly[weekly['week_start'] != week_key]
-    weekly = pd.concat([weekly, pd.DataFrame(rows)], ignore_index=True)
-    weekly.to_csv(WEEKLY_PREDICTIONS_PATH, index=False)
+    weekly = pd.concat([weekly, df_week], ignore_index=True)
+    _safe_write(WEEKLY_PREDICTIONS_PATH, weekly)
 
-
-# -------- Monthly prediction --------
-def generate_monthly_prediction(force=False):
+def generate_monthly_prediction_if_missing() -> None:
     today = date.today()
-    month_start = date(today.year, today.month, 1)
-    month_key = month_start.strftime('%Y-%m-01')
+    start, end = _month_range(today)
+    month_key = start.strftime('%Y-%m-%d')
+    if _monthly_exists_for(month_key):
+        return  # al aanwezig
 
-    print(f"[{datetime.now()}] MONTH → generating month {month_key}")
+    dates = []
+    cur = start
+    while cur <= end:
+        dates.append(cur)
+        cur += timedelta(days=1)
 
-    try:
-        monthly = pd.read_csv(MONTHLY_PREDICTIONS_PATH)
-    except FileNotFoundError:
-        monthly = pd.DataFrame(columns=[
-            'month_start', 'date', 'temperature', 'rain_mm',
-            'vacation', 'event', 'campaign', 'predicted_visitors'
-        ])
+    df_month = predict_range_aligned(dates)
+    df_month.insert(0, 'month_start', month_key)
 
-    if not force and not monthly.empty and (monthly['month_start'] == month_key).any():
-        print("MONTH → already exists, skip.")
-        return
-
-    weather = get_month_weather(month_start.year, month_start.month)
-
-    rows = []
-    for d in weather:
-        dt = datetime.strptime(d["date"], "%Y-%m-%d").date()
-
-        df_features = create_features(
-            d["temperature"],
-            d["rain_mm"],
-            is_vacation_today(dt),
-            is_event_today(dt),
-            0,
-            day_of_week=dt.weekday(),
-            month=dt.month
-        )
-
-        pred = int(model.predict(df_features)[0])
-
-        rows.append({
-            'month_start': month_key,
-            'date': d["date"],
-            'temperature': d["temperature"],
-            'rain_mm': d["rain_mm"],
-            'vacation': is_vacation_today(dt),
-            'event': is_event_today(dt),
-            'campaign': 0,
-            'predicted_visitors': pred
-        })
-
+    sample = df_month.copy()
+    monthly = _safe_read_or_init(MONTHLY_PREDICTIONS_PATH, sample)
     monthly = monthly[monthly['month_start'] != month_key]
-    monthly = pd.concat([monthly, pd.DataFrame(rows)], ignore_index=True)
-    monthly.to_csv(MONTHLY_PREDICTIONS_PATH, index=False)
+    monthly = pd.concat([monthly, df_month], ignore_index=True)
+    _safe_write(MONTHLY_PREDICTIONS_PATH, monthly)
 
+# --------------------------- Boot helper -------------------------------
+def boot_pipeline() -> Dict[str, int]:
+    """
+    Geen harde rebuild. We:
+    - verversen de dagvoorspelling (altijd)
+    - maken week/maand alleen aan als ze ontbreken
+    """
+    daily_obj = generate_daily_prediction()
+    generate_weekly_prediction_if_missing()
+    generate_monthly_prediction_if_missing()
 
-# -------- API --------
+    daily_df   = pd.read_csv(PREDICTIONS_PATH)   if _csv_exists(PREDICTIONS_PATH) else pd.DataFrame()
+    weekly_df  = pd.read_csv(WEEKLY_PREDICTIONS_PATH)  if _csv_exists(WEEKLY_PREDICTIONS_PATH) else pd.DataFrame()
+    monthly_df = pd.read_csv(MONTHLY_PREDICTIONS_PATH) if _csv_exists(MONTHLY_PREDICTIONS_PATH) else pd.DataFrame()
+    return {
+        "daily_rows":   int(len(daily_df)),
+        "weekly_rows":  int(len(weekly_df)),
+        "monthly_rows": int(len(monthly_df)),
+        "today_pred":   int(daily_obj.get("predicted_visitors", 0))
+    }
+
+# -------------------------------- API ----------------------------------
 @app.route('/api/predict_today', methods=['GET'])
 def predict_today():
-    today_str = datetime.today().strftime('%Y-%m-%d')
-    try:
-        preds = pd.read_csv(PREDICTIONS_PATH)
-        row = preds[preds['Date'] == today_str]
-        if not row.empty:
-            r = row.iloc[0]
-            return jsonify({
-                'date': r['Date'],
-                'temperature': float(r['temperature']),
-                'rain_mm': float(r['rain_mm']),
-                'vacation': bool(r['vacation']),
-                'event': bool(r['event']),
-                'campaign': bool(r['campaign']),
-                'predicted_visitors': int(r['predicted_visitors'])
-            })
-    except:
-        pass
-
-    prediction = generate_daily_prediction()
-    return jsonify({
-        'date': today_str,
-        'temperature': None,
-        'rain_mm': None,
-        'vacation': False,
-        'event': False,
-        'campaign': False,
-        'predicted_visitors': prediction
-    })
-
+    today_str = date.today().strftime('%Y-%m-%d')
+    df_sample = predict_range_aligned([date.today()])
+    preds = _safe_read_or_init(PREDICTIONS_PATH, df_sample)
+    row = preds.loc[preds['date'] == today_str]
+    if not row.empty:
+        return jsonify(row.iloc[0].to_dict())
+    out = generate_daily_prediction()
+    return jsonify(out)
 
 @app.route('/api/predict_custom', methods=['POST', 'OPTIONS'])
 def predict_custom():
-
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
-
     try:
         data = request.get_json(force=True)
+        d = date.today()
+        temp = float(data.get('temperature', 20))
+        rain = float(data.get('rain_mm', 0))
+        vac  = int(data.get('vacation', 0))
+        evt  = int(data.get('event', 0))
+        camp = int(data.get('campaign', 0))
+        dow  = int(data.get('day_of_week', d.weekday()))
+        month_override = data.get('month')
 
-        df = create_features(
-            data.get('temperature', 20),
-            data.get('rain_mm', 0),
-            data.get('vacation', 0),
-            data.get('event', 0),
-            data.get('campaign', 0),
-            day_of_week=data.get('day_of_week'),
-            month=data.get('month')
-        )
+        series = _build_series_until(d)  # uitlijnen t/m gisteren
+        X = _features_for_date(d, temp, rain, vac, evt, camp, series)
+        X.loc[:, 'day_of_week'] = dow
+        X.loc[:, 'is_weekend']  = int(dow in (5, 6))
+        if month_override is not None:
+            X.loc[:, 'month'] = int(month_override)
 
-        pred = int(model.predict(df)[0])
-        return jsonify({'predicted_visitors': pred})
-
+        y_raw = float(model.predict(X)[0])
+        y_hat = max(0.0, _apply_calibration(y_raw))
+        return jsonify({'predicted_visitors': int(round(y_hat))})
     except Exception as e:
-        print("Error in predict_custom:", e)
         return jsonify({'error': str(e)}), 400
 
-
 @app.route('/api/predict_week', methods=['GET'])
-def predict_week():
-    today = date.today()
-    monday = get_monday_of_current_week(today)
+def api_predict_week():
+    # NIET forceren; alleen aanmaken als ontbreekt
+    generate_weekly_prediction_if_missing()
+    monday = get_monday_of_current_week(date.today())
     week_key = monday.strftime('%Y-%m-%d')
 
-    try:
-        weekly = pd.read_csv(WEEKLY_PREDICTIONS_PATH)
-    except:
-        weekly = pd.DataFrame()
+    dates = [monday + timedelta(days=i) for i in range(7)]
+    df_sample = predict_range_aligned(dates)
+    sample_with_key = df_sample.assign(week_start=week_key)[['week_start'] + df_sample.columns.tolist()]
+    weekly = _safe_read_or_init(WEEKLY_PREDICTIONS_PATH, sample_with_key)
 
-    if weekly.empty or not (weekly['week_start'] == week_key).any():
-        generate_weekly_prediction(force=True)
-        weekly = pd.read_csv(WEEKLY_PREDICTIONS_PATH)
-
-    this_week = weekly[weekly['week_start'] == week_key].copy()
-    this_week = this_week.sort_values('date')
-
+    this_week = weekly[weekly['week_start'] == week_key].copy().sort_values('date')
     iso_year, iso_week, _ = monday.isocalendar()
-
-    weekday_names = [
-        'Maandag', 'Dinsdag', 'Woensdag',
-        'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'
-    ]
-
-    days = []
-    for _, row in this_week.iterrows():
-        dt = datetime.strptime(row['date'], '%Y-%m-%d').date()
-
+    weekday_names = ['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag']
+    days = []; total = 0
+    for _, r in this_week.iterrows():
+        dt = pd.to_datetime(r['date']).date()
+        pv = int(r['predicted_visitors']); total += pv
         days.append({
-            'date': row['date'],
+            'date': r['date'],
             'weekday': weekday_names[dt.weekday()],
-            'temperature': float(row['temperature']),
-            'rain_mm': float(row['rain_mm']),
-            'vacation': bool(row['vacation']),
-            'event': bool(row['event']),
-            'campaign': bool(row['campaign']),
-            'predicted_visitors': int(row['predicted_visitors'])
+            'temperature': float(r['temperature']),
+            'rain_mm': float(r['rain_mm']),
+            'vacation': bool(int(r['vacation'])),
+            'event': bool(int(r['event'])),
+            'campaign': bool(int(r['campaign'])),
+            'predicted_visitors': pv
         })
-
     return jsonify({
         'week_start': monday.strftime('%Y-%m-%d'),
         'week_end': (monday + timedelta(days=6)).strftime('%Y-%m-%d'),
-        'iso_week': iso_week,
-        'year': iso_year,
-        'days': days
+        'iso_week': iso_week, 'year': iso_year,
+        'days': days, 'total': total
     })
 
-
 @app.route('/api/predict_month', methods=['GET'])
-def predict_month():
+def api_predict_month():
+    # NIET forceren; alleen aanmaken als ontbreekt
+    generate_monthly_prediction_if_missing()
     today = date.today()
-    month_start = date(today.year, today.month, 1)
-    month_key = month_start.strftime('%Y-%m-%d')
+    start, end = _month_range(today)
+    month_key = start.strftime('%Y-%m-%d')
 
-    try:
-        monthly = pd.read_csv(MONTHLY_PREDICTIONS_PATH)
-    except:
-        monthly = pd.DataFrame()
-
-    if monthly.empty or not (monthly['month_start'] == month_key).any():
-        generate_monthly_prediction(force=True)
-        monthly = pd.read_csv(MONTHLY_PREDICTIONS_PATH)
+    dates = []; cur = start
+    while cur <= end:
+        dates.append(cur); cur += timedelta(days=1)
+    df_sample = predict_range_aligned(dates)
+    sample_with_key = df_sample.assign(month_start=month_key)[['month_start'] + df_sample.columns.tolist()]
+    monthly = _safe_read_or_init(MONTHLY_PREDICTIONS_PATH, sample_with_key)
 
     this_month = monthly[monthly['month_start'] == month_key]
-
     total = int(this_month['predicted_visitors'].sum()) if not this_month.empty else 0
 
-    month_names = [
-        "", "januari", "februari", "maart", "april", "mei", "juni",
-        "juli", "augustus", "september", "oktober", "november", "december"
-    ]
-
-    # laatste dag van de maand
-    if today.month == 12:
-        month_end = date(today.year + 1, 1, 1) - timedelta(days=1)
-    else:
-        month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
-
+    month_names = ["","januari","februari","maart","april","mei","juni",
+                   "juli","augustus","september","oktober","november","december"]
     return jsonify({
-        'month_start': month_start.strftime('%Y-%m-%d'),
-        'month_end': month_end.strftime('%Y-%m-%d'),
-        'year': month_start.year,
-        'month': month_start.month,
-        'month_name': month_names[month_start.month],
+        'month_start': start.strftime('%Y-%m-%d'),
+        'month_end': end.strftime('%Y-%m-%d'),
+        'year': start.year, 'month': start.month,
+        'month_name': month_names[start.month],
         'total_predicted_visitors': total
     })
 
+@app.route('/api/rebuild', methods=['POST'])
+def api_rebuild():
+    """
+    Handmatige rebuild: gooit niets meer weg.
+    Verversen we de dag en zorgen we dat week/maand aanwezig zijn.
+    """
+    try:
+        stats = boot_pipeline()
+        return jsonify({"status": "ok", **stats})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
-# -------- Scheduler --------
+# --------------------------- Scheduler ---------------------------------
 scheduler = BackgroundScheduler(daemon=True)
-scheduler.add_job(generate_daily_prediction, 'cron', hour=8, minute=0)
-scheduler.add_job(generate_weekly_prediction, 'cron', day_of_week='mon', hour=0, minute=1)
-scheduler.add_job(generate_monthly_prediction, 'cron', day=1, hour=0, minute=5)
+# Dagelijks: altijd bijwerken
+scheduler.add_job(lambda: generate_daily_prediction(), 'cron', hour=8, minute=0)
+# Wekelijks: alleen aanmaken als ontbreekt (maandag vlak na middernacht)
+scheduler.add_job(lambda: generate_weekly_prediction_if_missing(), 'cron', day_of_week='mon', hour=0, minute=5)
+# Maandelijks: alleen aanmaken als ontbreekt (dag 1)
+scheduler.add_job(lambda: generate_monthly_prediction_if_missing(), 'cron', day=1, hour=0, minute=10)
 scheduler.start()
-
 
 if __name__ == "__main__":
     print("→ Running Wildlands Prediction Backend")
-    print("→ Auto-generating daily, weekly & monthly predictions…")
-    generate_daily_prediction()
-    generate_weekly_prediction()
-    generate_monthly_prediction()
+    print("→ Daily refresh; weekly/monthly only once per period…")
+    # Geen vernietigende rebuild; enkel opzetten wat nodig is
+    boot_pipeline()
     app.run(host="0.0.0.0", port=5000, debug=True)
