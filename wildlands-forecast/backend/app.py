@@ -409,6 +409,13 @@ def api_rebuild():
         return jsonify({"status": "ok", **stats})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
+        
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"ok": True}), 200
+
+
+
 
 # --------------------------- Scheduler ---------------------------------
 scheduler = BackgroundScheduler(daemon=True)
@@ -423,6 +430,8 @@ scheduler.start()
 if __name__ == "__main__":
     print("→ Running Wildlands Prediction Backend")
     print("→ Daily refresh; weekly/monthly only once per period…")
-    # Geen vernietigende rebuild; enkel opzetten wat nodig is
-    boot_pipeline()
+    # Start de zware init asynchroon zodat /health meteen beschikbaar is
+    import threading
+    threading.Thread(target=boot_pipeline, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
+

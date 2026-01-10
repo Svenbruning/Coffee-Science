@@ -69,7 +69,7 @@
 </div>
 <div class="footer">🌍 Wildlands Adventure Zoo Emmen — Dagelijkse, wekelijkse & maandelijkse bezoekersvoorspelling</div>
 <script>
-const API = "http://127.0.0.1:5000";
+const API = ""; // relative: we proxy'en /api naar backend
 
 async function loadPrediction() {
   const res = await fetch(`${API}/api/predict_today`);
