@@ -1,14 +1,4 @@
-# User manual
-## Prerequisites
-### Docker Desktop (Downloads)
-
-**Prerequisites**
-
-•	Docker Desktop (Download)
-
-•	4 GB RAM minimum
-
-•	2 GB free disk space
+# Setup Guide
 
 # Installation Steps
 ## Docker Installation
@@ -27,31 +17,41 @@ Silicon or Intel based on your Mac).
 4. Grant permissions when prompted
 5. Wait until Docker shows Docker is running
 
+
 ## Get the project code 
 Ensure the project code is available on your machine:
 1. Download zip file
 2. Extract all...
 
+
 ## Start Desktop Docker
+
 
 ## Go to the right directory
 Open "Coffee-Science-initial-setup" that is inside the folder
 
+
 ## Open terminal window in Windows Powershell
 Right click on "wildlands-forecast" -> Open in Terminal with the correct path
+
 
 ### Build the Docker Images
 docker compose build
 
+
 ### Start the application
 docker compose up -d
 
+
 ## Visit link http://localhost:8080
+
 
 # Common Issues
 • Docker not running: Make sure Docker Desktop is started before running 
 commands.
+
 • Port already in use: Stop other services using the same ports or update docker compose.yml.
+
 
 # Stopping the Application
 To stop all running containers:
@@ -62,11 +62,3 @@ docker compose down
 From the project folder
 docker compose build
 docker compose up -d
-
-
- 
-
-
-•	analysis_summary_report.txt - Comprehensive analysis report
-
-•	Complete session and environment information
