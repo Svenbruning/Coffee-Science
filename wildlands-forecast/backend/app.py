@@ -94,6 +94,26 @@ def _is_weekend(dow: int) -> int: return int(dow in (5, 6))
 def _apply_calibration(y_hat: float) -> float:
     a, b = cal.get("a", 1.0), cal.get("b", 0.0)
     return a * y_hat + b
+def _temperature_correction(temp: float, baseline: float = 18.0) -> float:
+    factor = 1.0 + (temp - baseline) * 0.01
+    return float(np.clip(factor, 0.85, 1.15))
+def _rain_temperature_interaction(temp: float, rain_mm: float) -> float:
+    if rain_mm <= 0:
+        return 1.0
+
+    rain_factor = min(rain_mm / 10.0, 1.0)  # 0..1 bij 0–10mm
+
+    if temp < 10:
+        penalty = 0.15 * rain_factor   # koud + regen = zwaar
+    elif temp < 18:
+        penalty = 0.10 * rain_factor
+    elif temp < 25:
+        penalty = 0.06 * rain_factor
+    else:
+        penalty = 0.03 * rain_factor   # warm + regen = licht
+
+    return 1.0 - penalty
+
 
 # -------------------------- Feature builder ---------------------------
 def _features_for_date(d: date, temp: float, rain: float,
@@ -312,27 +332,45 @@ def predict_custom():
         return jsonify({"status": "ok"}), 200
     try:
         data = request.get_json(force=True)
-        d = date.today()
+
+        # ---- Datum (VERPLICHT) ----
+        d = datetime.strptime(data["date"], "%Y-%m-%d").date()
+
+        # ---- Exogene inputs ----
         temp = float(data.get('temperature', 20))
         rain = float(data.get('rain_mm', 0))
         vac  = int(data.get('vacation', 0))
         evt  = int(data.get('event', 0))
         camp = int(data.get('campaign', 0))
-        dow  = int(data.get('day_of_week', d.weekday()))
-        month_override = data.get('month')
 
-        series = _build_series_until(d)  # uitlijnen t/m gisteren
-        X = _features_for_date(d, temp, rain, vac, evt, camp, series)
-        X.loc[:, 'day_of_week'] = dow
-        X.loc[:, 'is_weekend']  = int(dow in (5, 6))
-        if month_override is not None:
-            X.loc[:, 'month'] = int(month_override)
+        # ---- Serie uitlijnen t/m dag vóór gekozen datum ----
+        series = _build_series_until(d)
+
+        # ---- Features bouwen (ALLE tijdsinfo uit datum!) ----
+        X = _features_for_date(
+            d,
+            temp=temp,
+            rain=rain,
+            vac=vac,
+            evt=evt,
+            camp=camp,
+            series=series
+        )
 
         y_raw = float(model.predict(X)[0])
         y_hat = max(0.0, _apply_calibration(y_raw))
-        return jsonify({'predicted_visitors': int(round(y_hat))})
+
+        y_hat *= _temperature_correction(temp)
+        y_hat *= _rain_temperature_interaction(temp, rain)
+
+        return jsonify({
+            "date": d.strftime("%Y-%m-%d"),
+            "predicted_visitors": int(round(y_hat))
+        })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
 
 @app.route('/api/predict_week', methods=['GET'])
 def api_predict_week():
